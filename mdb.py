@@ -1,7 +1,6 @@
 import pyodbc
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-
 import os
 import selenium.webdriver.support.ui as ui
 from selenium import webdriver
@@ -9,14 +8,69 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.options import Options
 from time import sleep
-
 from bs4 import BeautifulSoup
 
 class League:
-    def __init__(self, league_name, url_whoscored, url_championat):
+    def __init__(self, league_name, url_whoscored, url_championat,
+                url_past_season, url_referee_statistics):
         self.league_name = league_name
         self.url_whoscored = url_whoscored
         self.url_championat = url_championat
+        self.url_past_season = url_past_season
+        self.url_referee_statistics = url_referee_statistics
+
+class Match:
+    def __init__(self, team_home_url, team_away_url, match_url, league_name,
+                team_home_name, team_away_name, match_datetime, 
+                referee_name_championat, referee_name_championat_translated_to_en,
+                referee_name_whoscored, referee_url,
+                referee_this_season_average, referee_this_season_matches_count,
+                referee_all_seasons_average, referee_all_seasons_matches_count,
+                referee_to_team_home_average, referee_to_team_away_average,
+                referee_last_twenty_home_count, referee_last_twenty_away_count,
+                referee_last_twenty_last_kk_date,
+                team_home_kk_this_season_count, team_away_kk_this_season_count,
+                team_home_found_in_last_season, team_home_kk_last_season_count,
+                team_away_found_in_last_season, team_away_kk_last_season_count,
+                team_home_last_kk_date, team_away_last_kk_date,
+                team_home_personal_meetings_kk_count_home, team_home_personal_meetings_kk_count_away,
+                team_away_personal_meetings_kk_count_home, team_away_personal_meetings_kk_count_away,
+                teams_personal_meetings_last_kk_date, teamsstring):
+        self.team_home_url = team_home_url
+        self.team_away_url = team_away_url
+        self.match_url = match_url #ссылка на личную встречу команд
+        self.league_name = league_name #Лига
+        self.team_home_name = team_home_name #Дома
+        self.team_away_name = team_away_name #Гости
+        self.match_datetime = match_datetime #Дата
+        self.referee_name_championat = referee_name_championat #Судья, Имя на championat
+        self.referee_name_championat_translated_to_en = referee_name_championat_translated_to_en
+        self.referee_name_whoscored = referee_name_whoscored #Судья, Имя на whoscored
+        self.referee_url = referee_url  #Судья, URL на whoscored
+        self.referee_this_season_average = referee_this_season_average #Судья, Этот сезон
+        self.referee_this_season_matches_count = referee_this_season_matches_count
+        self.referee_all_seasons_average = referee_all_seasons_average #Судья, Все сезоны
+        self.referee_all_seasons_matches_count = referee_all_seasons_matches_count
+        self.referee_to_team_home_average = referee_to_team_home_average #Судья, Командам
+        self.referee_to_team_away_average = referee_to_team_away_average
+        self.referee_last_twenty_home_count = referee_last_twenty_home_count #Судья, Посл. 20 игр
+        self.referee_last_twenty_away_count = referee_last_twenty_away_count
+        self.referee_last_twenty_last_kk_date = referee_last_twenty_last_kk_date
+        self.team_home_kk_this_season_count = team_home_kk_this_season_count #Команды, КК этот сезон
+        self.team_away_kk_this_season_count = team_away_kk_this_season_count
+        self.team_home_found_in_last_season = team_home_found_in_last_season #Команды, КК предыдущий сезон
+        self.team_home_kk_last_season_count = team_home_kk_last_season_count
+        self.team_away_found_in_last_season = team_away_found_in_last_season
+        self.team_away_kk_last_season_count = team_away_kk_last_season_count
+        self.team_home_last_kk_date #Команды, Дата посл 1
+        self.team_away_last_kk_date #Команды, Дата посл 2
+        self.team_home_personal_meetings_kk_count_home = team_home_personal_meetings_kk_count_home #Команды, Личн. вст
+        self.team_home_personal_meetings_kk_count_away = team_home_personal_meetings_kk_count_away
+        self.team_away_personal_meetings_kk_count_home = team_away_personal_meetings_kk_count_home
+        self.team_away_personal_meetings_kk_count_away = team_away_personal_meetings_kk_count_away
+        self.teams_personal_meetings_last_kk_date = teams_personal_meetings_last_kk_date
+        self.teamsstring = teamsstring
+
 
 def write_to_spreadsheets():
     # Создаём Service-объект, для работы с Google-таблицами:
