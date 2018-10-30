@@ -111,11 +111,11 @@ def main():
     driver = webdriver.Chrome(executable_path=includes_path+'chromedriver.exe')
     #driver=webdriver.Firefox()
     
-    required_date = 'четверг, ноя 1 2018'
-    #required_date = 'суббота, ноя 3 2018'
+    #required_date = 'четверг, ноя 1 2018'
+    required_date = 'суббота, ноя 3 2018'
     required_date_unix = datestring_to_unix(required_date)
     match = []
-
+    i_match = 0
     # Для каждой лиги переходим на страницу Календаря Игр сайта whoscored:
     for i in range(0,league_length):
         next_clicked = True
@@ -135,16 +135,26 @@ def main():
                 for day in days:
                     if required_date in day:
                         # Это искомый день. Спарсим всю информацию по матчам для искомого дня данной лиги и выйдем из цикла:
+                        match_datetime = []
                         teams_home = []
                         teams_away = []
                         match_urls = []
                         soup = BeautifulSoup(day)
+                        match_datetime = soup.findAll('td', { 'class' : 'time' })
                         teams_home = soup.findAll('td', { 'class' : 'team home' })
                         teams_away = soup.findAll('td', { 'class' : 'team away' })
                         match_urls = soup.findAll('a', { 'class' : 'result-4 rc' })
-                        #for j in range(0,len(teams_home))
-                        #    teams_away[j]
-
+                        # Для каждого матча искомого дня текущей лиги получим его данные и занесём в массив match[]:
+                        for j in range(0,len(teams_home)):
+                            match.append(Match())
+                            match[i_match].league_name = league[i].league_name
+                            match[i_match].match_datetime = required_date + " " + match_datetime[j].text
+                            match[i_match].team_home_url = 'https://ru.whoscored.com'+teams_home[j].find('a', { 'class' : 'team-link ' })['href']
+                            match[i_match].team_home_name = teams_home[j].find('a', { 'class' : 'team-link ' }).text
+                            match[i_match].team_away_url = 'https://ru.whoscored.com'+teams_away[j].find('a', { 'class' : 'team-link ' })['href']
+                            match[i_match].team_away_name = teams_away[j].find('a', { 'class' : 'team-link ' }).text
+                            match[i_match].match_url = 'https://ru.whoscored.com'+match_urls[j]['href'] 
+                            i_match = i_match + 1
                         break
             else:
                 rowgroupheaders = []
