@@ -153,7 +153,8 @@ def main():
                             match[i_match].team_home_name = teams_home[j].find('a', { 'class' : 'team-link ' }).text
                             match[i_match].team_away_url = 'https://ru.whoscored.com'+teams_away[j].find('a', { 'class' : 'team-link ' })['href']
                             match[i_match].team_away_name = teams_away[j].find('a', { 'class' : 'team-link ' }).text
-                            match[i_match].match_url = 'https://ru.whoscored.com'+match_urls[j]['href'] 
+                            match[i_match].match_url = 'https://ru.whoscored.com'+match_urls[j]['href']
+                            next_clicked = False  # дальше таблицу не листаем
                             i_match = i_match + 1
                         break
             else:
