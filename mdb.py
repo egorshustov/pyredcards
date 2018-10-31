@@ -116,6 +116,10 @@ def main():
     required_date_unix = datestring_to_unix(required_date)
     match = []
     i_match = 0
+    ##################################################################################
+    ################################# МАТЧИ ЗА ДЕНЬ
+    ##################################################################################
+    print('Найдём матчи для каждой из лиг в указанный день:')
     # Для каждой лиги переходим на страницу Календаря Игр сайта whoscored:
     for i in range(0,league_length):
         next_clicked = True
@@ -176,6 +180,27 @@ def main():
 				    # (и при этом матчей до этого дня (в условии if required_date in tournament_fixture_innerhtml не было обнаружено),
 				    # то пролистаем таблицу дальше:
                     driver.find_element_by_css_selector('.next').click()
+    
+    # Определим длину списка matches:
+    matches_length = len(match)
+    ##################################################################################
+    ################################# ЛИЧНЫЕ ВСТРЕЧИ
+    ##################################################################################
+    print('Спарсим информацию личных встреч команд для каждого найденного матча:')
+    for i in range(0,matches_length):
+        driver.get(match[i].match_url)
+        print('Команды '+match[i].team_home_name+' и '+match[i].team_away_name)
+		# Проверим наличие таблицы предыдущих встреч двух команд
+		# по тексту заголовка previous-meetings-count
+        previous_meetings_count = ui.WebDriverWait(driver, 15).until(lambda driver: driver.find_element_by_id('previous-meetings-count')).get_property('innerText')
+        # Если текст заголовка previous-meetings-count не пустой (например, "(Последние N матчей)")
+        if previous_meetings_count != '':
+            # Получим таблицу предыдущих встреч двух команд:
+            previous_meetings_grid = ui.WebDriverWait(driver, 15).until(lambda driver: driver.find_element_by_id('previous-meetings-grid')).get_property('innerHTML')
+        
+
+
+
 
     #driver.close()
     #sleep(10)
