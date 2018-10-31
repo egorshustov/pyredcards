@@ -55,6 +55,7 @@ class Match:
         self.team_home_personal_meetings_kk_count_away = 0
         self.team_away_personal_meetings_kk_count_home = 0
         self.team_away_personal_meetings_kk_count_away = 0
+        self.personal_meetings_count = 0
         self.teams_personal_meetings_last_kk_date = ""
         self.teamsstring = ""
 
@@ -197,7 +198,10 @@ def main():
         if previous_meetings_count != '':
             # Получим таблицу предыдущих встреч двух команд:
             previous_meetings_grid = ui.WebDriverWait(driver, 15).until(lambda driver: driver.find_element_by_id('previous-meetings-grid')).get_property('innerHTML')
-        
+            soup = BeautifulSoup(previous_meetings_grid)
+            previous_matches = []
+            previous_matches = soup.findAll('tr', { 'class' : 'item' })
+            match[i].personal_meetings_count = len(previous_matches)
 
 
 
