@@ -108,9 +108,9 @@ def main():
     #write_to_spreadsheets()
 
     includes_path = "C:/Users/BRAXXMAN/source/repos/includes/"
-    os.environ["webdriver.chrome.driver"] = includes_path+"chromedriver.exe"
-    driver = webdriver.Chrome(executable_path=includes_path+'chromedriver.exe')
-    #driver=webdriver.Firefox()
+    #os.environ["webdriver.chrome.driver"] = includes_path+"chromedriver.exe"
+    #driver = webdriver.Chrome(executable_path=includes_path+'chromedriver.exe')
+    driver = webdriver.Firefox(executable_path=includes_path+'geckodriver.exe')
     
     #required_date = 'четверг, ноя 1 2018'
     required_date = 'суббота, ноя 3 2018'
@@ -124,11 +124,10 @@ def main():
     # Для каждой лиги переходим на страницу Календаря Игр сайта whoscored:
     for i in range(0,league_length):
         next_clicked = True
-        time.sleep(sleep_time) # Пауза для прогрузки таблицы
         driver.get(league[i].url_whoscored)
+        time.sleep(sleep_page_time) # Пауза для прогрузки страницы:
         while next_clicked != False:
             # Получим всю таблицу календаря игр:
-            time.sleep(sleep_time) # Пауза для прогрузки таблицы
             tournament_fixture = ui.WebDriverWait(driver, 15).until(lambda driver: driver.find_element_by_id('tournament-fixture'))
             tournament_fixture_innerhtml = tournament_fixture.get_property('innerHTML')
             #print(tournament_fixture_innerhtml)
@@ -145,20 +144,20 @@ def main():
                         teams_home = []
                         teams_away = []
                         match_urls = []
-                        soup = BeautifulSoup(day)
-                        match_datetime = soup.findAll('td', { 'class' : 'time' })
-                        teams_home = soup.findAll('td', { 'class' : 'team home' })
-                        teams_away = soup.findAll('td', { 'class' : 'team away' })
-                        match_urls = soup.findAll('a', { 'class' : 'result-4 rc' })
+                        soup = BeautifulSoup(day, 'lxml')
+                        match_datetime = soup.findAll('td', {'class' : 'time'})
+                        teams_home = soup.findAll('td', {'class' : 'team home'})
+                        teams_away = soup.findAll('td', {'class' : 'team away'})
+                        match_urls = soup.findAll('a', {'class' : 'result-4 rc'})
                         # Для каждого матча искомого дня текущей лиги получим его данные и занесём в массив match[]:
                         for j in range(0,len(teams_home)):
                             match.append(Match())
                             match[i_match].league_name = league[i].league_name
                             match[i_match].match_datetime = required_date + " " + match_datetime[j].text
-                            match[i_match].team_home_url = 'https://ru.whoscored.com'+teams_home[j].find('a', { 'class' : 'team-link ' })['href']
-                            match[i_match].team_home_name = teams_home[j].find('a', { 'class' : 'team-link ' }).text
-                            match[i_match].team_away_url = 'https://ru.whoscored.com'+teams_away[j].find('a', { 'class' : 'team-link ' })['href']
-                            match[i_match].team_away_name = teams_away[j].find('a', { 'class' : 'team-link ' }).text
+                            match[i_match].team_home_url = 'https://ru.whoscored.com'+teams_home[j].find('a', {'class' : 'team-link '})['href']
+                            match[i_match].team_home_name = teams_home[j].find('a', {'class' : 'team-link '}).text
+                            match[i_match].team_away_url = 'https://ru.whoscored.com'+teams_away[j].find('a', {'class' : 'team-link '})['href']
+                            match[i_match].team_away_name = teams_away[j].find('a', {'class' : 'team-link '}).text
                             match[i_match].match_url = 'https://ru.whoscored.com'+match_urls[j]['href']
                             next_clicked = False  # дальше таблицу не листаем
                             i_match = i_match + 1
@@ -182,6 +181,7 @@ def main():
 				    # (и при этом матчей до этого дня (в условии if required_date in tournament_fixture_innerhtml не было обнаружено),
 				    # то пролистаем таблицу дальше:
                     driver.find_element_by_css_selector('.next').click()
+                    time.sleep(sleep_table_time) # Пауза для прогрузки таблицы
     
     # Определим длину списка matches:
     matches_length = len(match)
@@ -192,6 +192,7 @@ def main():
     for i in range(0,matches_length):
         driver.get(match[i].match_url)
         print('Команды '+match[i].team_home_name+' и '+match[i].team_away_name)
+        time.sleep(sleep_page_time)
 		# Проверим наличие таблицы предыдущих встреч двух команд
 		# по тексту заголовка previous-meetings-count
         previous_meetings_count = ui.WebDriverWait(driver, 15).until(lambda driver: driver.find_element_by_id('previous-meetings-count')).get_property('innerText')
@@ -199,22 +200,50 @@ def main():
         if previous_meetings_count != '':
             # Получим таблицу предыдущих встреч двух команд:
             previous_meetings_grid = ui.WebDriverWait(driver, 15).until(lambda driver: driver.find_element_by_id('previous-meetings-grid')).get_property('innerHTML')
-            soup = BeautifulSoup(previous_meetings_grid)
+            soup = BeautifulSoup(previous_meetings_grid, 'lxml')
+            # Получим все предыдущие встречи двух команд и занесём их в список:
             previous_matches = []
-            previous_matches = soup.findAll('tr', { 'class' : 'item' })
+            previous_matches = soup.findAll('tr', {'class' : 'item'})
+            # Определим количество этих предыдущих матчей:
             match[i].personal_meetings_count = len(previous_matches)
+            # Пройдемся в цикле по каждому из предыдущих матчей:
+            kk_found = False
             for previous_match in previous_matches:
-                team_home = previous_match.find('td', 'team home')
-                team_away = previous_match.find('td', 'team away')
-
-
-
+                # Если в матче найдена КК:
+                if previous_match.find('span', {'class' : 'rcard ls-e'}) != None:
+                    # Если матчей с КК ещё не было найдено, то занесём в match[i] дату последней КК
+                    if kk_found == False:
+                        kk_found = True
+                        match[i].teams_personal_meetings_last_kk_date = previous_match.find('td', {'class' : 'date'}).text
+                    # Спарсим класс домашней команды для данного матча:
+                    team_home = previous_match.find('td', 'home') # Найдём тег td, содержащий класс home
+                    if team_home.find('span', {'class' : 'rcard ls-e'}) != None:
+                        if match[i].team_home_name in team_home.text:
+                            match[i].team_home_personal_meetings_kk_count_home = match[i].team_home_personal_meetings_kk_count_home + int(team_home.find('span', {'class' : 'rcard ls-e'}).text)
+                        if match[i].team_away_name in team_home.text:
+                            match[i].team_away_personal_meetings_kk_count_home = match[i].team_away_personal_meetings_kk_count_home + int(team_home.find('span', {'class' : 'rcard ls-e'}).text) 
+                    # Спарсим класс гостевой команды для данного матча:
+                    team_away = previous_match.find('td', 'away') # Найдём тег td, содержащий класс away
+                    if team_away.find('span', {'class' : 'rcard ls-e'}) != None:
+                        if match[i].team_home_name in team_away.text:
+                            match[i].team_home_personal_meetings_kk_count_away = match[i].team_home_personal_meetings_kk_count_away + int(team_away.find('span', {'class' : 'rcard ls-e'}).text)
+                        if match[i].team_away_name in team_away.text:
+                            match[i].team_away_personal_meetings_kk_count_away = match[i].team_away_personal_meetings_kk_count_away + int(team_away.find('span', {'class' : 'rcard ls-e'}).text) 
+        else:
+            # Если текст заголовка previous-meetings-count пустой
+            # пометим все атрибуты личных встреч как -1:
+            match[i].team_home_personal_meetings_kk_count_home = -1
+            match[i].team_home_personal_meetings_kk_count_away = -1
+            match[i].team_away_personal_meetings_kk_count_home = -1
+            match[i].team_away_personal_meetings_kk_count_away = -1
+            print('У команд '+match[i].team_home_name+' и '+match[i_match].team_away_name+' не было совместных встреч!')
 
     #driver.close()
     #sleep(10)
 
 if __name__ == '__main__':
-    sleep_time = 1
+    sleep_page_time = 5
+    sleep_table_time = 1
     # Получаем текущую локаль:
     default_loc = locale.getlocale()
     # Изменяем локаль для корректной конвертации строки с русской датой в datetime:
