@@ -124,6 +124,7 @@ def main():
     # Для каждой лиги переходим на страницу Календаря Игр сайта whoscored:
     for i in range(0,league_length):
         next_clicked = True
+        time.sleep(sleep_time) # Пауза для прогрузки таблицы
         driver.get(league[i].url_whoscored)
         while next_clicked != False:
             # Получим всю таблицу календаря игр:
@@ -202,6 +203,9 @@ def main():
             previous_matches = []
             previous_matches = soup.findAll('tr', { 'class' : 'item' })
             match[i].personal_meetings_count = len(previous_matches)
+            for previous_match in previous_matches:
+                team_home = previous_match.find('td', 'team home')
+                team_away = previous_match.find('td', 'team away')
 
 
 
