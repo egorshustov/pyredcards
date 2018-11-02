@@ -11,8 +11,39 @@ from bs4 import BeautifulSoup
 import time
 import datetime
 import locale
+import sys
+from PyQt5.QtCore import pyqtSlot, QThread
+from PyQt5.QtWidgets import QApplication,QDialog,QMainWindow
+from PyQt5.uic import loadUi
 
+class Window(QMainWindow):
+
+    def __init__(self):
+        super(Window, self).__init__()
+        # Загрузим UI из файла:
+        loadUi('redcardsdesigner.ui', self)
+        # Создадим обработчик для кнопки:
+        self.startButton.clicked.connect(self.on_startButton_clicked)
+        # Инициализируем объект класса нити:
+        self.workerThread = WorkerThread()
+        # Запустим форму окна:
+        self.show()
+
+    def on_startButton_clicked(self):
+        # При нажатии на кнопку запустим нить workerThread:
+        self.workerThread.start()
+
+class WorkerThread(QThread):
+
+    def __init__(self):
+        super(WorkerThread, self).__init__()
+    
+    def run(self):
+        # Вызываем главную функцию:
+        main()
+       
 class League:
+
     def __init__(self, league_name, url_whoscored, url_championat,):
         self.league_name = league_name
         self.url_whoscored = url_whoscored
@@ -22,6 +53,7 @@ class League:
         self.matches_found = True
 
 class Match:
+
     def __init__(self):
         self.team_home_url = ""
         self.team_away_url = ""
@@ -219,16 +251,16 @@ def main():
                     team_home = previous_match.find('td', 'home') # Найдём тег td, содержащий класс home
                     if team_home.find('span', {'class' : 'rcard ls-e'}) != None:
                         if match[i].team_home_name in team_home.text:
-                            match[i].team_home_personal_meetings_kk_count_home = match[i].team_home_personal_meetings_kk_count_home + int(team_home.find('span', {'class' : 'rcard ls-e'}).text)
+                            match[i].team_home_personal_meetings_kk_count_home += int(team_home.find('span', {'class' : 'rcard ls-e'}).text)
                         if match[i].team_away_name in team_home.text:
-                            match[i].team_away_personal_meetings_kk_count_home = match[i].team_away_personal_meetings_kk_count_home + int(team_home.find('span', {'class' : 'rcard ls-e'}).text) 
+                            match[i].team_away_personal_meetings_kk_count_home += int(team_home.find('span', {'class' : 'rcard ls-e'}).text) 
                     # Спарсим класс гостевой команды для данного матча:
                     team_away = previous_match.find('td', 'away') # Найдём тег td, содержащий класс away
                     if team_away.find('span', {'class' : 'rcard ls-e'}) != None:
                         if match[i].team_home_name in team_away.text:
-                            match[i].team_home_personal_meetings_kk_count_away = match[i].team_home_personal_meetings_kk_count_away + int(team_away.find('span', {'class' : 'rcard ls-e'}).text)
+                            match[i].team_home_personal_meetings_kk_count_away += int(team_away.find('span', {'class' : 'rcard ls-e'}).text)
                         if match[i].team_away_name in team_away.text:
-                            match[i].team_away_personal_meetings_kk_count_away = match[i].team_away_personal_meetings_kk_count_away + int(team_away.find('span', {'class' : 'rcard ls-e'}).text) 
+                            match[i].team_away_personal_meetings_kk_count_away += int(team_away.find('span', {'class' : 'rcard ls-e'}).text) 
         else:
             # Если текст заголовка previous-meetings-count пустой
             # пометим все атрибуты личных встреч как -1:
@@ -239,7 +271,7 @@ def main():
             print('У команд '+match[i].team_home_name+' и '+match[i_match].team_away_name+' не было совместных встреч!')
 
     #driver.close()
-    #sleep(10)
+    time.sleep(1)
 
 if __name__ == '__main__':
     sleep_page_time = 5
@@ -248,7 +280,10 @@ if __name__ == '__main__':
     default_loc = locale.getlocale()
     # Изменяем локаль для корректной конвертации строки с русской датой в datetime:
     locale.setlocale(locale.LC_ALL, ('RU','UTF8'))
-    # Вызываем главную функцию:
-    main()
+
+    app = QApplication(sys.argv)
+    ex = Window()
+    app.exec_()
+
     # Меняем локаль назад:
     locale.setlocale(locale.LC_ALL, default_loc)
