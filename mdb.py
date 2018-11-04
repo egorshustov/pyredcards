@@ -12,8 +12,9 @@ import time
 import datetime
 import locale
 import sys
+import PyQt5.QtGui as QtGui
 from PyQt5.QtCore import pyqtSlot, QThread
-from PyQt5.QtWidgets import QApplication,QDialog,QMainWindow
+from PyQt5.QtWidgets import (QApplication,QDialog,QMainWindow,QWidget, QCalendarWidget)
 from PyQt5.uic import loadUi
 
 class Window(QMainWindow):
@@ -23,15 +24,17 @@ class Window(QMainWindow):
         # Загрузим UI из файла:
         loadUi('redcardsdesigner.ui', self)
         # Создадим обработчик для кнопки:
-        self.startButton.clicked.connect(self.on_startButton_clicked)
+        self.startButton.clicked.connect(self.on_startbutton_clicked)
         # Инициализируем объект класса нити:
         self.workerThread = WorkerThread()
         # Запустим форму окна:
         self.show()
 
-    def on_startButton_clicked(self):
+    def on_startbutton_clicked(self):
         # При нажатии на кнопку запустим нить workerThread:
-        self.workerThread.start()
+        # self.workerThread.start()
+        # cal = self.calendarWidget
+        main()
 
 class WorkerThread(QThread):
 
@@ -40,7 +43,8 @@ class WorkerThread(QThread):
     
     def run(self):
         # Вызываем главную функцию:
-        main()
+        #main()
+        time.sleep(1)
        
 class League:
 
@@ -143,10 +147,15 @@ def main():
     #os.environ["webdriver.chrome.driver"] = includes_path+"chromedriver.exe"
     #driver = webdriver.Chrome(executable_path=includes_path+'chromedriver.exe')
     driver = webdriver.Firefox(executable_path=includes_path+'geckodriver.exe')
-    
     #required_date = 'четверг, ноя 1 2018'
-    required_date = 'суббота, ноя 3 2018'
-    required_date_unix = datestring_to_unix(required_date)
+
+    #Получим объект calendarWidget с окна программы wind:
+    cal = wind.calendarWidget
+    # Получим выбранную дату и выполним преобразование из QDate в datetime:
+    required_date = cal.selectedDate().toPyDate()
+    # Преобразуем datetime в unix:
+    required_date_unix = time.mktime(required_date.timetuple())
+
     match = []
     i_match = 0
     ##################################################################################
@@ -282,7 +291,7 @@ if __name__ == '__main__':
     locale.setlocale(locale.LC_ALL, ('RU','UTF8'))
 
     app = QApplication(sys.argv)
-    ex = Window()
+    wind = Window()
     app.exec_()
 
     # Меняем локаль назад:
