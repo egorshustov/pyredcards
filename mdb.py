@@ -155,6 +155,10 @@ def main():
     required_date = cal.selectedDate().toPyDate()
     # Преобразуем datetime в unix:
     required_date_unix = time.mktime(required_date.timetuple())
+    # Преобразуем datetime в string:
+    required_date = required_date.strftime('%A, %b %e %Y')
+    # Удалим двойной пробел, который образуется, если %e (день месяца) меньше 10: 
+    required_date = required_date.replace('  ', ' ')
 
     match = []
     i_match = 0
