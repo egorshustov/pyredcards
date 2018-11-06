@@ -1,7 +1,8 @@
-mdb.pyproj
 report.csv
 RC_base2.mdb
 RC_base2_lessdata.mdb
 RedCardsProject-90325d995892.json
 debug.log
 geckodriver.log
+/.idea
+/venv
