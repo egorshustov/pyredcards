@@ -13,7 +13,7 @@ import datetime
 import locale
 import sys
 import PyQt5.QtGui as QtGui
-from PyQt5.QtCore import pyqtSlot, QThread
+from PyQt5.QtCore import pyqtSlot, QThread, Qt
 from PyQt5.QtWidgets import (QApplication, QDialog, QMainWindow, QWidget, QCalendarWidget)
 from PyQt5.uic import loadUi
 
@@ -21,9 +21,10 @@ from PyQt5.uic import loadUi
 class Window(QMainWindow):
 
     def __init__(self):
-        super(Window, self).__init__()
+        super(Window, self).__init__(flags=Qt.WindowFlags())
         # Загрузим UI из файла:
         loadUi('redcardsdesigner.ui', self)
+
         # Создадим обработчик для кнопки:
         self.startButton.clicked.connect(self.on_startbutton_clicked)
         # Инициализируем объект класса нити:
@@ -113,11 +114,11 @@ def datestring_to_unix(datestring):
 
 def write_to_spreadsheets():
     # Создаём Service-объект, для работы с Google-таблицами:
-    CREDENTIALS_FILE = 'RedCardsProject-90325d995892.json'  # имя выгруженного файла с закрытым ключом
+    credentials_file = 'RedCardsProject-90325d995892.json'  # имя выгруженного файла с закрытым ключом
     # В Scope укажем к каким API мы хотим получить доступ:
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
     # Заполним массив с учётными данными:
-    credentials = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
+    credentials = ServiceAccountCredentials.from_json_keyfile_name(credentials_file, scope)
     # Авторизуемся с этими учётными данными:
     gc = gspread.authorize(credentials)
     # Откроем Spreadsheet с указанным именем:
@@ -170,7 +171,7 @@ def main():
     match = []
     i_match = 0
     ##################################################################################
-    ################################# МАТЧИ ЗА ДЕНЬ
+    # МАТЧИ ЗА ДЕНЬ
     ##################################################################################
     print('Найдём матчи для каждой из лиг в указанный день:')
     # Для каждой лиги переходим на страницу Календаря Игр сайта whoscored:
@@ -178,26 +179,22 @@ def main():
         next_clicked = True
         driver.get(league[i].url_whoscored)
         time.sleep(sleep_page_time)  # Пауза для прогрузки страницы:
-        while next_clicked != False:
+        while next_clicked is True:
             # Получим всю таблицу календаря игр:
             tournament_fixture = ui.WebDriverWait(driver, 15).until(
-                lambda driver: driver.find_element_by_id('tournament-fixture'))
+                lambda driver1: driver.find_element_by_id('tournament-fixture'))
             tournament_fixture_innerhtml = tournament_fixture.get_property('innerHTML')
             # print(tournament_fixture_innerhtml)
             if required_date in tournament_fixture_innerhtml:
                 # Если искомая дата присутствует в таблице, спарсим все матчи на искомую дату для данной лиги.
                 # Спарсим все дни с матчами в таблице:
-                days = []
                 days = tournament_fixture_innerhtml.split('<tr class=\"rowgroupheader\"><th colspan=\"7\">')
                 # Пройдёмся по всем дням в таблице и найдём тот день, в котором присуствует искомая дата:
                 for day in days:
                     if required_date in day:
-                        # Это искомый день. Спарсим всю информацию по матчам для искомого дня данной лиги и выйдем из цикла:
-                        match_datetime = []
-                        teams_home = []
-                        teams_away = []
-                        match_urls = []
-                        soup = BeautifulSoup(day)
+                        # Это искомый день. Спарсим всю информацию по матчам для искомого дня
+                        # данной лиги и выйдем из цикла:
+                        soup = BeautifulSoup(day, "html.parser")
                         match_datetime = soup.findAll('td', {'class': 'time'})
                         teams_home = soup.findAll('td', {'class': 'team home'})
                         teams_away = soup.findAll('td', {'class': 'team away'})
@@ -218,7 +215,6 @@ def main():
                             i_match = i_match + 1
                         break
             else:
-                rowgroupheaders = []
                 rowgroupheaders = tournament_fixture.find_elements_by_class_name('rowgroupheader')
                 # Возьмём последний rowgroupheader в таблице и достанем из него дату:
                 # (также уберём из его innerText последний символ (символ перевода строки через операцию среза [0:-1]):
@@ -226,14 +222,18 @@ def main():
                 last_date_in_table_unix = datestring_to_unix(last_date_in_table)
                 if last_date_in_table_unix > required_date_unix:
                     # Если последний день в текущем диапазоне дней больше указанного
-                    # (и при этом матчей до этого дня (в условии if required_date in tournament_fixture_innerhtml не было обнаружено),
+                    # (и при этом матчей до этого дня
+                    # (в условии if required_date in tournament_fixture_innerhtml)
+                    # не было обнаружено),
                     # то делаем вывод, что в текущей лиге не нашлось матчей в указанный день:
                     next_clicked = False  # дальше таблицу не листаем
                     league[i].matches_found = False
                     print('В ' + league[i].league_name + ' на ru.whoscored.com нет матчей в указанный день!')
                 else:
                     # Если последний день в текущем диапазоне дней ещё меньше указанного
-                    # (и при этом матчей до этого дня (в условии if required_date in tournament_fixture_innerhtml не было обнаружено),
+                    # (и при этом матчей до этого дня
+                    # (в условии if required_date in tournament_fixture_innerhtml)
+                    # не было обнаружено),
                     # то пролистаем таблицу дальше:
                     driver.find_element_by_css_selector('.next').click()
                     time.sleep(sleep_table_time)  # Пауза для прогрузки таблицы
@@ -241,7 +241,7 @@ def main():
     # Определим длину списка matches:
     matches_length = len(match)
     ##################################################################################
-    ################################# ЛИЧНЫЕ ВСТРЕЧИ
+    # ЛИЧНЫЕ ВСТРЕЧИ
     ##################################################################################
     print('Спарсим информацию личных встреч команд для каждого найденного матча:')
     for i in range(0, matches_length):
@@ -251,15 +251,14 @@ def main():
         # Проверим наличие таблицы предыдущих встреч двух команд
         # по тексту заголовка previous-meetings-count
         previous_meetings_count = ui.WebDriverWait(driver, 15).until(
-            lambda driver: driver.find_element_by_id('previous-meetings-count')).get_property('innerText')
+            lambda driver1: driver.find_element_by_id('previous-meetings-count')).get_property('innerText')
         # Если текст заголовка previous-meetings-count не пустой (например, "(Последние N матчей)")
         if previous_meetings_count != '':
             # Получим таблицу предыдущих встреч двух команд:
             previous_meetings_grid = ui.WebDriverWait(driver, 15).until(
-                lambda driver: driver.find_element_by_id('previous-meetings-grid')).get_property('innerHTML')
-            soup = BeautifulSoup(previous_meetings_grid)
+                lambda driver1: driver.find_element_by_id('previous-meetings-grid')).get_property('innerHTML')
+            soup = BeautifulSoup(previous_meetings_grid, "html.parser")
             # Получим все предыдущие встречи двух команд и занесём их в список:
-            previous_matches = []
             previous_matches = soup.findAll('tr', {'class': 'item'})
             # Определим количество этих предыдущих матчей:
             match[i].personal_meetings_count = len(previous_matches)
@@ -267,15 +266,15 @@ def main():
             kk_found = False
             for previous_match in previous_matches:
                 # Если в матче найдена КК:
-                if previous_match.find('span', {'class': 'rcard ls-e'}) != None:
+                if previous_match.find('span', {'class': 'rcard ls-e'}) is not None:
                     # Если матчей с КК ещё не было найдено, то занесём в match[i] дату последней КК
-                    if kk_found == False:
+                    if kk_found is False:
                         kk_found = True
                         match[i].teams_personal_meetings_last_kk_date = previous_match.find('td',
                                                                                             {'class': 'date'}).text
                     # Спарсим класс домашней команды для данного матча:
                     team_home = previous_match.find('td', 'home')  # Найдём тег td, содержащий класс home
-                    if team_home.find('span', {'class': 'rcard ls-e'}) != None:
+                    if team_home.find('span', {'class': 'rcard ls-e'}) is not None:
                         if match[i].team_home_name in team_home.text:
                             match[i].team_home_personal_meetings_kk_count_home += int(
                                 team_home.find('span', {'class': 'rcard ls-e'}).text)
@@ -284,7 +283,7 @@ def main():
                                 team_home.find('span', {'class': 'rcard ls-e'}).text)
                             # Спарсим класс гостевой команды для данного матча:
                     team_away = previous_match.find('td', 'away')  # Найдём тег td, содержащий класс away
-                    if team_away.find('span', {'class': 'rcard ls-e'}) != None:
+                    if team_away.find('span', {'class': 'rcard ls-e'}) is not None:
                         if match[i].team_home_name in team_away.text:
                             match[i].team_home_personal_meetings_kk_count_away += int(
                                 team_away.find('span', {'class': 'rcard ls-e'}).text)
