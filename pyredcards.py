@@ -27,8 +27,10 @@ class Window(QMainWindow):
 
         # Создадим обработчик для кнопки:
         self.startButton.clicked.connect(self.on_startbutton_clicked)
+        self.reportButton.clicked.connect(self.on_reportbutton_clicked)
         # Инициализируем объект класса нити:
         self.workerThread = WorkerThread()
+        self.reportThread = ReportThread()
         # Запустим форму окна:
         self.show()
 
@@ -36,7 +38,10 @@ class Window(QMainWindow):
         # При нажатии на кнопку запустим нить workerThread:
         self.workerThread.start()
         # cal = self.calendarWidget
-        # main()
+
+    def on_reportbutton_clicked(self):
+        # При нажатии на кнопку запустим нить workerThread:
+        self.reportThread.start()
 
 
 class WorkerThread(QThread):
@@ -47,7 +52,15 @@ class WorkerThread(QThread):
     def run(self):
         # Вызываем главную функцию:
         main()
-        time.sleep(1)
+
+
+class ReportThread(QThread):
+
+    def __init__(self):
+        super(ReportThread, self).__init__()
+
+    def run(self):
+        write_to_spreadsheets()
 
 
 class League:
@@ -112,68 +125,13 @@ def datestring_to_unix(datestring):
     return datestring_unix
 
 
-def write_to_spreadsheets():
-    # Создаём Service-объект, для работы с Google-таблицами:
-    credentials_file = 'RedCardsProject-90325d995892.json'  # имя выгруженного файла с закрытым ключом
-    # В Scope укажем к каким API мы хотим получить доступ:
-    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    # Заполним массив с учётными данными:
-    credentials = ServiceAccountCredentials.from_json_keyfile_name(credentials_file, scope)
-    # Авторизуемся с этими учётными данными:
-    gc = gspread.authorize(credentials)
-    # Откроем Spreadsheet с указанным именем:
-    sh = gc.open('Python')
-    # Получим первый лист этого Spreadsheet:
-    worksheet = sh.sheet1
-    # удалить лист из файла (удалится только если лист не единственный):
-    # sh.del_worksheet(worksheet)
-    # предоставить себе роль владельца файла:
-    # sh.share('egorshustov.93@gmail.com', perm_type='user', role='owner')
-    # Запишем каждую строку списка league[] в лист worksheet:
-    for i in range(0, league_length):
-        worksheet.append_row([league[i].league_name, league[i].url_whoscored, league[i].url_championat])
-
-
-def main():
-    # Подключимся к БД Microsoft Access через экземпляр ODBC
-    db = pyodbc.connect('DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=.\\RC_base2_lessdata.mdb')
-    dbc = db.cursor()
-    # Получим информацию из БД, занесём её в rows
-    rows = dbc.execute('select * from [Leagues]').fetchall()
-    db.close()
-
-    # Определим длину списка rows:
-    league_length = len(rows)
-    # Инициализируем список league[] и заполним его экземплярами класса League:
-    league = []
-    for i in range(0, league_length):
-        league.append(League(rows[i][1], rows[i][2], rows[i][3]))
-
-    # write_to_spreadsheets()
-
-    includes_path = "C:/Users/BRAXXMAN/PycharmProjects/includes/"
-    # os.environ["webdriver.chrome.driver"] = includes_path+"chromedriver.exe"
-    # driver = webdriver.Chrome(executable_path=includes_path+'chromedriver.exe')
-    driver = webdriver.Firefox(executable_path=includes_path + 'geckodriver.exe')
-    # required_date = 'четверг, ноя 1 2018'
-
-    # Получим объект calendarWidget с окна программы wind:
-    cal = wind.calendarWidget
-    # Получим выбранную дату и выполним преобразование из QDate в datetime:
-    required_date = cal.selectedDate().toPyDate()
-    # Преобразуем datetime в unix:
-    required_date_unix = time.mktime(required_date.timetuple())
-    # Преобразуем datetime в string:
-    required_date = required_date.strftime('%A, %b %e %Y')
-    # Удалим двойной пробел, который образуется, если %e (день месяца) меньше 10:
-    required_date = required_date.replace('  ', ' ')
-
-    match = []
-    i_match = 0
+def get_matches():
     ##################################################################################
     # МАТЧИ ЗА ДЕНЬ
     ##################################################################################
     print('Найдём матчи для каждой из лиг в указанный день:')
+    global match
+    i_match = 0
     # Для каждой лиги переходим на страницу Календаря Игр сайта whoscored:
     for i in range(0, league_length):
         next_clicked = True
@@ -237,9 +195,12 @@ def main():
                     # то пролистаем таблицу дальше:
                     driver.find_element_by_css_selector('.next').click()
                     time.sleep(sleep_table_time)  # Пауза для прогрузки таблицы
-
     # Определим длину списка matches:
+    global matches_length
     matches_length = len(match)
+
+
+def get_personal_meetengs():
     ##################################################################################
     # ЛИЧНЫЕ ВСТРЕЧИ
     ##################################################################################
@@ -297,14 +258,82 @@ def main():
             match[i].team_home_personal_meetings_kk_count_away = -1
             match[i].team_away_personal_meetings_kk_count_home = -1
             match[i].team_away_personal_meetings_kk_count_away = -1
-            print('У команд ' + match[i].team_home_name + ' и ' + match[
-                i_match].team_away_name + ' не было совместных встреч!')
+            print('У команд ' + match[i].team_home_name + ' и '
+                  + match[i].team_away_name + ' не было совместных встреч!')
+
+
+def write_to_spreadsheets():
+    # Создаём Service-объект, для работы с Google-таблицами:
+    credentials_file = 'RedCardsProject-90325d995892.json'  # имя выгруженного файла с закрытым ключом
+    # В Scope укажем к каким API мы хотим получить доступ:
+    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+    # Заполним массив с учётными данными:
+    credentials = ServiceAccountCredentials.from_json_keyfile_name(credentials_file, scope)
+    # Авторизуемся с этими учётными данными:
+    gc = gspread.authorize(credentials)
+    # Откроем Spreadsheet с указанным именем:
+    sh = gc.open('Python')
+    # Получим первый лист этого Spreadsheet:
+    worksheet = sh.sheet1
+    # удалить лист из файла (удалится только если лист не единственный):
+    # sh.del_worksheet(worksheet)
+    # предоставить себе роль владельца файла:
+    # sh.share('egorshustov.93@gmail.com', perm_type='user', role='owner')
+    # Запишем каждую строку списка league[] в лист worksheet:
+
+    # for i in range(0, league_length):
+    #     worksheet.append_row([league[i].league_name, league[i].url_whoscored, league[i].url_championat])
+
+
+def main():
+    # Подключимся к БД Microsoft Access через экземпляр ODBC
+    db = pyodbc.connect('DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=.\\RC_base2_lessdata.mdb')
+    dbc = db.cursor()
+    # Получим информацию из БД, занесём её в rows
+    rows = dbc.execute('select * from [Leagues]').fetchall()
+    db.close()
+    # Определим длину списка rows:
+    global league_length
+    league_length = len(rows)
+    # Инициализируем список league[] и заполним его экземплярами класса League:
+    global league
+    for i in range(0, league_length):
+        league.append(League(rows[i][1], rows[i][2], rows[i][3]))
+
+    includes_path = "C:/Users/BRAXXMAN/PycharmProjects/includes/"
+    # os.environ["webdriver.chrome.driver"] = includes_path+"chromedriver.exe"
+    # driver = webdriver.Chrome(executable_path=includes_path+'chromedriver.exe')
+    global driver
+    driver = webdriver.Firefox(executable_path=includes_path + 'geckodriver.exe')
+    # Получим объект calendarWidget с окна программы wind:
+    cal = wind.calendarWidget
+    # Получим выбранную дату и выполним преобразование из QDate в datetime:
+    global required_date
+    required_date = cal.selectedDate().toPyDate()
+    # Преобразуем datetime в unix:
+    global required_date_unix
+    required_date_unix = time.mktime(required_date.timetuple())
+    # Преобразуем datetime в string:
+    required_date = required_date.strftime('%A, %b %e %Y')
+    # Удалим двойной пробел, который образуется, если %e (день месяца) меньше 10:
+    required_date = required_date.replace('  ', ' ')
+
+    # Получим информацию о матчах в указанный день:
+    get_matches()
+    # Получим информацию о личных встречах команд:
+    get_personal_meetengs()
 
     # driver.close()
     time.sleep(1)
 
 
 if __name__ == '__main__':
+    league = []
+    league_length = 0
+
+    match = []
+    matches_length = 0
+
     sleep_page_time = 5
     sleep_table_time = 1
     # Получаем текущую локаль:
