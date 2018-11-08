@@ -1,5 +1,6 @@
 import pyodbc
-import gspread
+import httplib2
+import apiclient.discovery
 from oauth2client.service_account import ServiceAccountCredentials
 import os
 import selenium.webdriver.support.ui as ui
@@ -269,20 +270,18 @@ def write_to_spreadsheets():
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
     # Заполним массив с учётными данными:
     credentials = ServiceAccountCredentials.from_json_keyfile_name(credentials_file, scope)
-    # Авторизуемся с этими учётными данными:
-    gc = gspread.authorize(credentials)
-    # Откроем Spreadsheet с указанным именем:
-    sh = gc.open('Python')
-    # Получим первый лист этого Spreadsheet:
-    worksheet = sh.sheet1
-    # удалить лист из файла (удалится только если лист не единственный):
-    # sh.del_worksheet(worksheet)
-    # предоставить себе роль владельца файла:
-    # sh.share('egorshustov.93@gmail.com', perm_type='user', role='owner')
-    # Запишем каждую строку списка league[] в лист worksheet:
-
-    # for i in range(0, league_length):
-    #     worksheet.append_row([league[i].league_name, league[i].url_whoscored, league[i].url_championat])
+    httpAuth = credentials.authorize(httplib2.Http())
+    # Создаём Service-объект для работы с Google-таблицами:
+    service = apiclient.discovery.build('sheets', 'v4', http=httpAuth)
+    # Укажем идентификатор документа, к которому хотим получить доступ.
+    spreadsheet_id = '10PPb2Tk51-68fBqew-tEnDqbA_MaCEQGyrHAxcnQ4Jc'
+    # The ranges to retrieve from the spreadsheet.
+    ranges = []
+    # True if grid data should be returned.
+    # This parameter is ignored if a field mask was set in the request.
+    include_grid_data = False  # TODO: Update placeholder value.
+    request = service.spreadsheets().get(spreadsheetId=spreadsheet_id, ranges=ranges, includeGridData=include_grid_data)
+    spreadsheet = request.execute()
 
 
 def main():
