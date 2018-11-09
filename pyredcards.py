@@ -162,7 +162,7 @@ def get_matches():
                         for j in range(0, len(teams_home)):
                             match.append(Match())
                             match[i_match].league_name = league[i].league_name
-                            match[i_match].match_datetime = required_date + ' ' + match_datetime[j].text
+                            match[i_match].match_datetime = match_datetime[j].text
                             match[i_match].team_home_url = 'https://ru.whoscored.com' + \
                                                            teams_home[j].find('a', {'class': 'team-link '})['href']
                             match[i_match].team_home_name = teams_home[j].find('a', {'class': 'team-link '}).text
@@ -401,6 +401,8 @@ def write_to_spreadsheets():
         }).execute()
 
     # Выведем все матчи в цикле:
+    n = 3  # Начинаем вывод данных о матчах с третьей по счёту строчки таблицы
+    previous_league_name = ''
     for i in range(0, matches_length):
         # Соберём строку str_personal_meetings для её последующего вывода:
         if ((match[i].team_home_personal_meetings_kk_count_home != -1) and
@@ -417,25 +419,33 @@ def write_to_spreadsheets():
 
         else:
                 str_personal_meetings = "Не встречались"
+
+        # Если у нового матча лига сменилась, разделим лиги при выводе пустой строчкой:
+        if match[i].league_name != previous_league_name and previous_league_name != '':
+            n += 1
+
+        previous_league_name = match[i].league_name
+
         # Выведем строку матча:
         service.spreadsheets().values().batchUpdate(spreadsheetId=spreadsheet['spreadsheetId'], body={
             'valueInputOption': 'USER_ENTERED',
             'data': [
                 {
-                    'range': 'Лист1!A'+str(i+3)+':O'+str(i+3)+'',
+                    'range': 'Лист1!A'+str(n)+':O'+str(n)+'',
                     'majorDimension': 'ROWS',
                     # сначала заполнять ряды, затем столбцы (т.е. самые внутренние списки в values - это ряды)
                     'values':
                         [
                             # ['Лига', 'Дома', 'Гости', 'Дата', 'Судья', '', '', '', 'Команды', '', '', '', '', '', 'Судья']
                             [match[i].league_name, match[i].team_home_name, match[i].team_away_name,
-                             '', '', '', '', '', '', '', '', '',
+                             match[i].match_datetime, '', '', '', '', '', '', '', '',
                              str_personal_meetings,
                              '', '']
                         ]
                 }
             ]
         }).execute()
+        n += 1
 
     service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet['spreadsheetId'], body={
         'requests': [
