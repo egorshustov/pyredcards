@@ -72,6 +72,7 @@ class League:
         self.url_championat = url_championat
         self.url_past_season = ''
         self.url_referee_statistics = ''
+        self.url_games_calendar_past_season = ''
         self.matches_found = True
 
 
@@ -137,7 +138,22 @@ def get_matches():
     for i in range(0, league_length):
         next_clicked = True
         driver.get(league[i].url_whoscored)
-        time.sleep(sleep_page_time)  # Пауза для прогрузки страницы:
+        time.sleep(sleep_page_time)  # Пауза для прогрузки страницы
+        print('Лига ' + league[i].league_name + '...')
+
+        # Параллельно получим ссылку на прошлый сезон каждой лиги:
+        league[i].url_past_season = 'https://ru.whoscored.com' +\
+                                    driver.find_element_by_css_selector('#seasons'
+                                                                        ' > option:nth-child(2)').get_property('value')
+        if league[i].league_name == 'Англия 2':  # Исключение для сезона Англия 2 - задаём вручную
+            league[i].url_past_season = 'https://ru.whoscored.com/Regions/252/Tournaments/7/' \
+                                        'Seasons/6848/Stages/15177/Show/Англия-2-2017-2018'
+
+        # Параллельно получим ссылку на статистику судей каждой лиги:
+        league[i].url_referee_statistics = driver.find_element_by_css_selector('#sub-navigation > ul:nth-child(1) >'
+                                                                               ' li:nth-child(5) > a:nth-child(1)') \
+            .get_property('href')
+
         while next_clicked is True:
             # Получим всю таблицу календаря игр:
             tournament_fixture = ui.WebDriverWait(driver, 15).until(
@@ -201,6 +217,7 @@ def get_matches():
     # Определим длину списка matches:
     global matches_length
     matches_length = len(match)
+    print('Поиск матчей для каждой из лиг в указанный день завершен.')
 
 
 def get_personal_meetengs():
@@ -263,9 +280,93 @@ def get_personal_meetengs():
             match[i].team_away_personal_meetings_kk_count_away = -1
             print('У команд ' + match[i].team_home_name + ' и '
                   + match[i].team_away_name + ' не было совместных встреч!')
+    print('Информация личных встреч команд для каждого найденного матча получена.')
+
+
+def get_kk_this_and_last_season():
+    ##################################################################################
+    # КК ЗА ЭТОТ И ПРЕДЫДУЩИЙ СЕЗОН, ДАТА ПОСЛЕДНЕЙ КК
+    ##################################################################################
+    print('Достанем ссылки на календарь игр прошлых сезонов:')
+    for i in range(0, league_length):
+        if league[i].matches_found is True:
+            driver.get(league[i].url_past_season)
+            time.sleep(sleep_page_time)
+            league[i].url_games_calendar_past_season = \
+                driver.find_element_by_css_selector('#sub-navigation > ul:nth-child(1) >'
+                                                    ' li:nth-child(2) > a:nth-child(1)').get_property('href')
+    print('Ссылки успешно получены.')
+    print('Получим информацию о КК за текущий сезон:')
+    for i in range(0, league_length):
+        if league[i].matches_found is True:
+            previous_clicked = True
+            driver.get(league[i].url_whoscored)
+            time.sleep(sleep_page_time)
+
+            while previous_clicked is True:
+                # Определим месяц (написан на кнопке):
+                current_month = driver.find_element_by_css_selector('span.text:nth-child(1)').get_property('innerHTML')
+                print('Текущий сезон лиги ' + league[i].league_name + ', месяц ' + current_month + ';')
+                # Получим тело таблицы "Календарь Игр & Результаты":
+                tournament_fixture = ui.WebDriverWait(driver, 15).until(
+                    lambda driver1: driver.find_element_by_css_selector('#tournament-fixture > tbody:nth-child(1)'))
+                tournament_fixture_innerhtml = tournament_fixture.get_property('innerHTML')
+                # Спарсим все дни с матчами в таблице:
+                days = tournament_fixture_innerhtml.split('<tr class="rowgroupheader"><th colspan="7">')
+                # Пройдёмся по всем дням в таблице в обратном порядке:
+                for day in reversed(days):
+                    soup = BeautifulSoup(day, 'html.parser')
+                    # Если в дне найдена хотя бы одна красная карточка
+                    if soup.find('span', {'class': 'rcard ls-e'}) is not None:
+                        # Получим список гостевых и домашних команд в данном дне:
+                        teams_home = soup.findAll('td', 'home')
+                        teams_away = soup.findAll('td', 'away')
+                        teams_all = teams_home + teams_away
+                        # Пройдёмся по общему списку команд в данном дне (teams_all):
+                        for j in range(0, len(teams_all)):
+                            # Если у класса команды есть КК,
+                            if teams_all[j].find('span', {'class': 'rcard ls-e'}) is not None:
+                                # спарсим количество КК, которое эта команда получила в матче:
+                                kk_count_in_match = int(teams_all[j].find('span', {'class': 'rcard ls-e'}).text)
+                                # и проверим наличие этой команды с КК в массиве match[]:
+                                for k in range(0, matches_length):
+                                    # Пройдёмся по всем матчам массива match[] (но только для текущей лиги):
+                                    if match[k].league_name == league[i].league_name:
+                                        if match[k].team_home_name in teams_all[j].text:
+                                            # Если в массиве match[] присутствует название команды:
+                                            if match[k].team_home_last_kk_date == '':
+                                                # Если дата последней КК для этой команды не была найдена ранее,
+                                                # спарсим её из rowgroupheader текущего дня:
+                                                match[k].team_home_last_kk_date = day.split('</th>')[0]
+                                            # Прибавим к счётчику КК этой команды kk_count_in_match:
+                                            match[k].team_home_kk_this_season_count += kk_count_in_match
+
+                                        if match[k].team_away_name in teams_all[j].text:
+                                            # Если в массиве match[] присутствует название команды:
+                                            if match[k].team_away_last_kk_date == '':
+                                                # Если дата последней КК для этой команды не была найдена ранее,
+                                                # спарсим её из rowgroupheader текущего дня:
+                                                match[k].team_away_last_kk_date = day.split('</th>')[0]
+                                            # Прибавим к счётчику КК этой команды kk_count_in_match:
+                                            match[k].team_away_kk_this_season_count += kk_count_in_match
+
+                # Проверим, активна ли кнопка "предыдущий месяц". Получим перечень её классов:
+                classes_of_button = driver.find_element_by_css_selector('.previous').get_property('className')
+                if 'is-disabled' in classes_of_button:
+                    # Если кнопка неактивна, то продолжать листать календарь назад уже нельзя.
+                    print('Парсинг текущего сезона завершён.')
+                    previous_clicked = False
+                else:
+                    # Если кнопка активна, перейдём на предыдущий месяц календаря:
+                    driver.find_element_by_css_selector('.previous').click()
+                    time.sleep(sleep_table_time)  # Пауза для прогрузки таблицы
+    print('Информация о КК за текущий сезон получена.')
 
 
 def write_to_spreadsheets():
+    ##################################################################################
+    # ВЫВОД ДАННЫХ МАССИВА match[] В GOOGLE SHEETS
+    ##################################################################################
     # Создаём Service-объект, для работы с Google-таблицами:
     credentials_file = 'RedCardsProject-90325d995892.json'  # имя выгруженного файла с закрытым ключом
     # В Scope укажем к каким API мы хотим получить доступ:
@@ -438,7 +539,10 @@ def write_to_spreadsheets():
                         [
                             # ['Лига', 'Дома', 'Гости', 'Дата', 'Судья', '', '', '', 'Команды', '', '', '', '', '', 'Судья']
                             [match[i].league_name, match[i].team_home_name, match[i].team_away_name,
-                             match[i].match_datetime, '', '', '', '', '', '', '', '',
+                             match[i].match_datetime, '', '', '', '',
+                             str(match[i].team_home_kk_this_season_count) + '/' +
+                             str(match[i].team_away_kk_this_season_count),
+                             '', match[i].team_home_last_kk_date, match[i].team_away_last_kk_date,
                              str_personal_meetings,
                              '', '']
                         ]
@@ -480,10 +584,14 @@ def main():
         league.append(League(rows[i][1], rows[i][2], rows[i][3]))
 
     includes_path = 'C:/Users/BRAXXMAN/PycharmProjects/includes/'
+    global driver
     # os.environ['webdriver.chrome.driver'] = includes_path+'chromedriver.exe'
     # driver = webdriver.Chrome(executable_path=includes_path+'chromedriver.exe')
-    global driver
-    driver = webdriver.Firefox(executable_path=includes_path + 'geckodriver.exe')
+    # Отключим изображения в браузере Firefox:
+    options = webdriver.FirefoxOptions()
+    options.set_preference('permissions.default.image', 2)
+    options.set_preference('dom.ipc.plugins.enabled.libflashplayer.so', 'false')
+    driver = webdriver.Firefox(options=options, executable_path=includes_path + 'geckodriver.exe')
     # Получим объект calendarWidget с окна программы wind:
     cal = wind.calendarWidget
     # Получим выбранную дату и выполним преобразование из QDate в datetime:
@@ -500,7 +608,11 @@ def main():
     # Получим информацию о матчах в указанный день:
     get_matches()
     # Получим информацию о личных встречах команд:
-    get_personal_meetengs()
+    # get_personal_meetengs()
+    # Получим информацию о количестве КК у команд за этот и прошлый сезон, о дате последней КК:
+    get_kk_this_and_last_season()
+    # Запишем полученную информацию в Google Sheets:
+    # write_to_spreadsheets()
 
     # driver.close()
     time.sleep(1)
