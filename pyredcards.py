@@ -127,6 +127,17 @@ def datestring_to_unix(datestring):
     return datestring_unix
 
 
+def datestring_format(datestring):
+    # Преобразует строку типа 'суббота, окт 27 2018' в строку типа '27-10-2018'.
+    # Удалим день недели:
+    datestring = datestring[datestring.find(', ') + 2:]
+    # Преобразуем строку в datetime:
+    datestring_dt = datetime.datetime.strptime(datestring, u'%b %d %Y')
+    # Преобразуем datetime в строку:
+    datestring_formatted = datestring_dt.strftime("%d-%m-%Y")
+    return datestring_formatted
+
+
 def get_matches():
     ##################################################################################
     # МАТЧИ ЗА ДЕНЬ
@@ -283,10 +294,7 @@ def get_personal_meetengs():
     print('Информация личных встреч команд для каждого найденного матча получена.')
 
 
-def get_kk_this_and_last_season():
-    ##################################################################################
-    # КК ЗА ЭТОТ И ПРЕДЫДУЩИЙ СЕЗОН, ДАТА ПОСЛЕДНЕЙ КК
-    ##################################################################################
+def get_url_games_calendar_past_season():
     print('Достанем ссылки на календарь игр прошлых сезонов:')
     for i in range(0, league_length):
         if league[i].matches_found is True:
@@ -296,21 +304,39 @@ def get_kk_this_and_last_season():
                 driver.find_element_by_css_selector('#sub-navigation > ul:nth-child(1) >'
                                                     ' li:nth-child(2) > a:nth-child(1)').get_property('href')
     print('Ссылки успешно получены.')
-    print('Получим информацию о КК за текущий сезон:')
+
+
+def get_kk_this_or_last_season(this_season):
+    ##################################################################################
+    # КК ЗА ЭТОТ ИЛИ ПРЕДЫДУЩИЙ СЕЗОН, ДАТА ПОСЛЕДНЕЙ КК
+    ##################################################################################
+    if this_season:
+        print('Получим информацию о КК за текущий сезон:')
+    else:
+        print('Получим информацию о КК за прошлый сезон:')
+
     for i in range(0, league_length):
         if league[i].matches_found is True:
             previous_clicked = True
-            driver.get(league[i].url_whoscored)
+            if this_season:
+                driver.get(league[i].url_whoscored)
+            else:
+                driver.get(league[i].url_games_calendar_past_season)
             time.sleep(sleep_page_time)
 
             while previous_clicked is True:
                 # Определим месяц (написан на кнопке):
                 current_month = driver.find_element_by_css_selector('span.text:nth-child(1)').get_property('innerHTML')
-                print('Текущий сезон лиги ' + league[i].league_name + ', месяц ' + current_month + ';')
+                if this_season:
+                    print('Текущий сезон лиги ' + league[i].league_name + ', месяц ' + current_month + ';')
+                else:
+                    print('Прошлый сезон лиги ' + league[i].league_name + ', месяц ' + current_month + ';')
+
                 # Получим тело таблицы "Календарь Игр & Результаты":
                 tournament_fixture = ui.WebDriverWait(driver, 15).until(
                     lambda driver1: driver.find_element_by_css_selector('#tournament-fixture > tbody:nth-child(1)'))
                 tournament_fixture_innerhtml = tournament_fixture.get_property('innerHTML')
+
                 # Спарсим все дни с матчами в таблице:
                 days = tournament_fixture_innerhtml.split('<tr class="rowgroupheader"><th colspan="7">')
                 # Пройдёмся по всем дням в таблице в обратном порядке:
@@ -332,41 +358,73 @@ def get_kk_this_and_last_season():
                                 for k in range(0, matches_length):
                                     # Пройдёмся по всем матчам массива match[] (но только для текущей лиги):
                                     if match[k].league_name == league[i].league_name:
+
+                                        if not this_season:
+                                            # Если прошлый сезон, то для каждой команды данной лиги массива match[]
+                                            # проверим её присутствие в таблице tournament_fixture:
+                                            if (match[k].team_home_found_in_last_season is False) and\
+                                                    (match[k].team_home_name in tournament_fixture_innerhtml):
+                                                # Если команда не была найдена ранее в прошлом сезоне
+                                                # и при этом присутствует в таблице прошлого сезона,
+                                                # отметим, что команда присутствует в прошлом сезоне данной лиги:
+                                                match[k].team_home_found_in_last_season = True
+                                            if (match[k].team_away_found_in_last_season is False) and\
+                                                    (match[k].team_away_name in tournament_fixture_innerhtml):
+                                                # Если команда не была найдена ранее в прошлом сезоне
+                                                # и при этом присутствует в таблице прошлого сезона,
+                                                # отметим, что команда присутствует в прошлом сезоне данной лиги:
+                                                match[k].team_away_found_in_last_season = True
+
                                         if match[k].team_home_name in teams_all[j].text:
                                             # Если в массиве match[] присутствует название команды:
                                             if match[k].team_home_last_kk_date == '':
                                                 # Если дата последней КК для этой команды не была найдена ранее,
                                                 # спарсим её из rowgroupheader текущего дня:
-                                                match[k].team_home_last_kk_date = day.split('</th>')[0]
+                                                match[k].team_home_last_kk_date = \
+                                                    datestring_format(day.split('</th>')[0])
                                             # Прибавим к счётчику КК этой команды kk_count_in_match:
-                                            match[k].team_home_kk_this_season_count += kk_count_in_match
+                                            if this_season:
+                                                match[k].team_home_kk_this_season_count += kk_count_in_match
+                                            else:
+                                                match[k].team_home_kk_last_season_count += kk_count_in_match
 
                                         if match[k].team_away_name in teams_all[j].text:
                                             # Если в массиве match[] присутствует название команды:
                                             if match[k].team_away_last_kk_date == '':
                                                 # Если дата последней КК для этой команды не была найдена ранее,
                                                 # спарсим её из rowgroupheader текущего дня:
-                                                match[k].team_away_last_kk_date = day.split('</th>')[0]
+                                                match[k].team_away_last_kk_date = \
+                                                    datestring_format(day.split('</th>')[0])
                                             # Прибавим к счётчику КК этой команды kk_count_in_match:
-                                            match[k].team_away_kk_this_season_count += kk_count_in_match
+                                            if this_season:
+                                                match[k].team_away_kk_this_season_count += kk_count_in_match
+                                            else:
+                                                match[k].team_away_kk_last_season_count += kk_count_in_match
 
                 # Проверим, активна ли кнопка "предыдущий месяц". Получим перечень её классов:
                 classes_of_button = driver.find_element_by_css_selector('.previous').get_property('className')
                 if 'is-disabled' in classes_of_button:
                     # Если кнопка неактивна, то продолжать листать календарь назад уже нельзя.
-                    print('Парсинг текущего сезона завершён.')
+                    if this_season:
+                        print('Парсинг текущего сезона завершён.')
+                    else:
+                        print('Парсинг прошлого сезона завершён.')
                     previous_clicked = False
                 else:
                     # Если кнопка активна, перейдём на предыдущий месяц календаря:
                     driver.find_element_by_css_selector('.previous').click()
                     time.sleep(sleep_table_time)  # Пауза для прогрузки таблицы
-    print('Информация о КК за текущий сезон получена.')
+    if this_season:
+        print('Информация о КК за текущий сезон получена.')
+    else:
+        print('Информация о КК за прошлый сезон получена.')
 
 
 def write_to_spreadsheets():
     ##################################################################################
     # ВЫВОД ДАННЫХ МАССИВА match[] В GOOGLE SHEETS
     ##################################################################################
+    print('Запишем полученную информацию в Google Sheets...')
     # Создаём Service-объект, для работы с Google-таблицами:
     credentials_file = 'RedCardsProject-90325d995892.json'  # имя выгруженного файла с закрытым ключом
     # В Scope укажем к каким API мы хотим получить доступ:
@@ -383,9 +441,29 @@ def write_to_spreadsheets():
     request = service.spreadsheets().get(spreadsheetId=spreadsheet_id, ranges=ranges, includeGridData=include_grid_data)
     spreadsheet = request.execute()
 
+    title = datestring_format(required_date)
+    service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet['spreadsheetId'], body={
+        'requests': [
+            {
+                # Обновить свойства листа:
+                'updateSheetProperties': {
+                    'properties': {
+                        'sheetId': 0,
+                        'title': title,
+                        # 'index': number,
+                        'gridProperties': {
+                            'columnCount': 15
+                        },
+                    },
+                    'fields': 'title, gridProperties(columnCount)'
+                }
+            }
+        ]
+    }).execute()
+
     # Прочитаем первые две строки листа:
     result = service.spreadsheets().values().get(
-        spreadsheetId=spreadsheet['spreadsheetId'], range='Лист1!A1:O2').execute()
+        spreadsheetId=spreadsheet['spreadsheetId'], range=title+'!A1:O2').execute()
     num_rows = result.get('values') if result.get('values') is not None else 0
     # Если первые две строки листа пустые, то сделаем заголовок:
     if num_rows == 0:
@@ -393,7 +471,7 @@ def write_to_spreadsheets():
             'valueInputOption': 'USER_ENTERED',
             'data': [
                 {
-                    'range': 'Лист1!A1:O2',
+                    'range': title+'!A1:O2',
                     'majorDimension': 'ROWS',
                     # сначала заполнять ряды, затем столбцы (т.е. самые внутренние списки в values - это ряды)
                     'values':
@@ -497,6 +575,18 @@ def write_to_spreadsheets():
                         },
                         'mergeType': 'MERGE_ALL'
                     }
+                },
+                # Заморозим первые две строки заголовка:
+                {
+                    'updateSheetProperties': {
+                        'properties': {
+                            'sheetId': 0,
+                            'gridProperties': {
+                                'frozenRowCount': 2
+                            }
+                        },
+                        'fields': 'gridProperties.frozenRowCount'
+                    }
                 }
             ]
         }).execute()
@@ -521,6 +611,25 @@ def write_to_spreadsheets():
         else:
                 str_personal_meetings = "Не встречались"
 
+        # Подготовим строки для их последующего вывода:
+        if match[i].team_home_found_in_last_season is True:
+            if match[i].team_home_kk_this_season_count == 0 and match[i].team_home_kk_last_season_count == 0:
+                match[i].team_home_last_kk_date = 'Давно'
+            str_team_home_kk_last_season_count = str(match[i].team_home_kk_last_season_count)
+        else:
+            str_team_home_kk_last_season_count = '???'
+            if match[i].team_home_kk_this_season_count == 0:
+                match[i].team_home_last_kk_date = '???'
+
+        if match[i].team_away_found_in_last_season is True:
+            if match[i].team_away_kk_this_season_count == 0 and match[i].team_away_kk_last_season_count == 0:
+                match[i].team_away_last_kk_date = 'Давно'
+            str_team_away_kk_last_season_count = str(match[i].team_away_kk_last_season_count)
+        else:
+            str_team_away_kk_last_season_count = '???'
+            if match[i].team_away_kk_this_season_count == 0:
+                match[i].team_away_last_kk_date = '???'
+
         # Если у нового матча лига сменилась, разделим лиги при выводе пустой строчкой:
         if match[i].league_name != previous_league_name and previous_league_name != '':
             n += 1
@@ -532,7 +641,7 @@ def write_to_spreadsheets():
             'valueInputOption': 'USER_ENTERED',
             'data': [
                 {
-                    'range': 'Лист1!A'+str(n)+':O'+str(n)+'',
+                    'range': title+'!A'+str(n)+':O'+str(n)+'',
                     'majorDimension': 'ROWS',
                     # сначала заполнять ряды, затем столбцы (т.е. самые внутренние списки в values - это ряды)
                     'values':
@@ -542,7 +651,9 @@ def write_to_spreadsheets():
                              match[i].match_datetime, '', '', '', '',
                              str(match[i].team_home_kk_this_season_count) + '/' +
                              str(match[i].team_away_kk_this_season_count),
-                             '', match[i].team_home_last_kk_date, match[i].team_away_last_kk_date,
+                             str_team_home_kk_last_season_count + '/' +
+                             str_team_away_kk_last_season_count,
+                             match[i].team_home_last_kk_date, match[i].team_away_last_kk_date,
                              str_personal_meetings,
                              '', '']
                         ]
@@ -563,9 +674,62 @@ def write_to_spreadsheets():
                         'endIndex': 15  # startIndex берётся включительно, endIndex - НЕ включительно
                     }
                 }
+            },
+            # Применим форматирование (цвет фона и текста, выравнивание) к ячейкам:
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": 0,
+                        "startRowIndex": 0,
+                        "endRowIndex": 515
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "backgroundColor": {
+                                "red": 1.0,
+                                "green": 1.0,
+                                "blue": 1.0
+                            },
+                            "horizontalAlignment": "CENTER",
+                            "textFormat": {
+                                "foregroundColor": {
+                                    "red": 0.0,
+                                    "green": 0.0,
+                                    "blue": 0.0
+                                },
+                                # "fontSize": 12,
+                                # "bold": True
+                            }
+                        }
+                    },
+                    "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)"
+                }
             }
         ]
     }).execute()
+
+    '''
+    service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet['spreadsheetId'], body={
+        'requests': [
+            # Задать размеры для всех столбцов
+            {
+                'updateDimensionProperties': {
+                    'range': {
+                        'sheetId': 0,
+                        'dimension': 'COLUMNS',
+                        'startIndex': 0,
+                        'endIndex': 15
+                    },
+                    'properties': {
+                        'pixelSize': 160
+                    },
+                    'fields': 'pixelSize'
+                }
+            }
+        ]
+    }).execute()
+    '''
+    print('Полученная информация записана в Google Sheets.')
 
 
 def main():
@@ -609,10 +773,15 @@ def main():
     get_matches()
     # Получим информацию о личных встречах команд:
     # get_personal_meetengs()
-    # Получим информацию о количестве КК у команд за этот и прошлый сезон, о дате последней КК:
-    get_kk_this_and_last_season()
+    # Достанем ссылки на календарь игр прошлых сезонов:
+    get_url_games_calendar_past_season()
+    # Получим информацию о количестве КК у команд за этот сезон, о дате последней КК:
+    get_kk_this_or_last_season(True)
+    # Получим информацию о количестве КК у команд за прошлый сезон, о дате последней КК
+    # (если она не была найдена в последнем сезоне):
+    get_kk_this_or_last_season(False)
     # Запишем полученную информацию в Google Sheets:
-    # write_to_spreadsheets()
+    write_to_spreadsheets()
 
     # driver.close()
     time.sleep(1)
