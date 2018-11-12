@@ -222,9 +222,20 @@ def get_matches():
                     # (и при этом матчей до этого дня
                     # (в условии if required_date in tournament_fixture_innerhtml)
                     # не было обнаружено),
-                    # то пролистаем таблицу дальше:
-                    driver.find_element_by_css_selector('.next').click()
-                    time.sleep(sleep_table_time)  # Пауза для прогрузки таблицы
+                    # И если кнопка next активна,
+                    # то пролистаем таблицу дальше.
+                    # Проверим, активна ли кнопка "предыдущий месяц". Получим перечень её классов:
+                    classes_of_button = driver.find_element_by_css_selector('.next').get_property('className')
+                    if 'is-disabled' in classes_of_button:
+                        # Если кнопка неактивна, то продолжать листать календарь вперёд уже нельзя,
+                        # И это значит, что сезон завершился.
+                        next_clicked = False  # дальше таблицу не листаем
+                        league[i].matches_found = False
+                        print('Сезон лиги ' + league[i].league_name + ' уже завершился на указанный день!')
+                    else:
+                        # Если кнопка активна, перейдём на предыдущий месяц календаря:
+                        driver.find_element_by_css_selector('.next').click()
+                        time.sleep(sleep_table_time)  # Пауза для прогрузки таблицы
     # Определим длину списка matches:
     global matches_length
     matches_length = len(match)
@@ -734,7 +745,7 @@ def write_to_spreadsheets():
 
 def main():
     # Подключимся к БД Microsoft Access через экземпляр ODBC
-    db = pyodbc.connect('DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=.\\RC_base2_lessdata.mdb')
+    db = pyodbc.connect('DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=.\\RC_base2.mdb')
     dbc = db.cursor()
     # Получим информацию из БД, занесём её в rows
     rows = dbc.execute('select * from [Leagues]').fetchall()
@@ -772,7 +783,7 @@ def main():
     # Получим информацию о матчах в указанный день:
     get_matches()
     # Получим информацию о личных встречах команд:
-    # get_personal_meetengs()
+    get_personal_meetengs()
     # Достанем ссылки на календарь игр прошлых сезонов:
     get_url_games_calendar_past_season()
     # Получим информацию о количестве КК у команд за этот сезон, о дате последней КК:
