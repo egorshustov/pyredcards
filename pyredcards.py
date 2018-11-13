@@ -449,17 +449,49 @@ def write_to_spreadsheets():
     spreadsheet_id = '10PPb2Tk51-68fBqew-tEnDqbA_MaCEQGyrHAxcnQ4Jc'
     ranges = []
     include_grid_data = False
+    # Получим spreadsheet с указанным spreadsheet_id:
     request = service.spreadsheets().get(spreadsheetId=spreadsheet_id, ranges=ranges, includeGridData=include_grid_data)
     spreadsheet = request.execute()
-
     title = datestring_format(required_date)
+    # Попробуем найти в spreadsheet лист с названием title и если он есть, получим его sheetId:
+    sheet_exists = False
+    sheet_id = 0
+
+    for sheet in spreadsheet['sheets']:
+        if sheet['properties']['title'] == title:
+            sheet_exists = True
+            sheet_id = sheet['properties']['sheetId']
+            break
+
+    if not sheet_exists:
+        # Если лист не существует, то создадим его:
+        result = service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet['spreadsheetId'], body={
+            'requests': [
+                {
+                    "addSheet": {
+                        "properties": {
+                            "title": title,
+                            'index': 0,  # Порядковый номер листа в списке листов. Если 0 - то самый левый
+                            "gridProperties": {
+                                "rowCount": 1000,
+                                "columnCount": 15
+                            }
+                        }
+                    }
+
+                }
+            ]
+        }).execute()
+        # Получим sheet_id только что созданного листа:
+        sheet_id = result['replies'][0]['addSheet']['properties']['sheetId']
+    '''
     service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet['spreadsheetId'], body={
         'requests': [
             {
                 # Обновить свойства листа:
                 'updateSheetProperties': {
                     'properties': {
-                        'sheetId': 0,
+                        'sheetId': sheet_id,
                         'title': title,
                         # 'index': number,
                         'gridProperties': {
@@ -471,13 +503,26 @@ def write_to_spreadsheets():
             }
         ]
     }).execute()
+    '''
+
+    # Определим объект границы (тип данных словарь), чтобы применять его в дальнейшем при рисовании границ:
+    border = {
+        'style': 'SOLID', 'width': 3,
+        'color':
+            {
+                'red': 0, 'green': 0, 'blue': 0, 'alpha': 1
+            }
+    }
 
     # Прочитаем первые две строки листа:
+    row_index = 1
     result = service.spreadsheets().values().get(
-        spreadsheetId=spreadsheet['spreadsheetId'], range=title+'!A1:O2').execute()
-    num_rows = result.get('values') if result.get('values') is not None else 0
-    # Если первые две строки листа пустые, то сделаем заголовок:
-    if num_rows == 0:
+        spreadsheetId=spreadsheet['spreadsheetId'], range=title+'!A' + str(row_index) + ':O' + str(row_index + 1))\
+        .execute()
+    two_rows = result.get('values')
+
+    if two_rows is None:
+        # Если первые две строки листа пустые, то сделаем заголовок:
         service.spreadsheets().values().batchUpdate(spreadsheetId=spreadsheet['spreadsheetId'], body={
             'valueInputOption': 'USER_ENTERED',
             'data': [
@@ -495,21 +540,13 @@ def write_to_spreadsheets():
                 }
             ]
         }).execute()
-        # Определим объект границы (тип данных словарь), чтобы применять его при рисовании границ:
-        border = {
-            'style': 'SOLID', 'width': 3,
-            'color':
-                {
-                    'red': 0, 'green': 0, 'blue': 0, 'alpha': 1
-                }
-        }
         service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet['spreadsheetId'], body={
             'requests': [
                 # Нарисуем границы для всех ячеек:
                 {
                     'updateBorders': {
                         'range': {
-                            'sheetId': 0,
+                            'sheetId': sheet_id,
                             'startRowIndex': 0,
                             'endRowIndex': 2,
                             'startColumnIndex': 0,
@@ -527,7 +564,7 @@ def write_to_spreadsheets():
                 {
                     'updateBorders': {
                         'range': {
-                            'sheetId': 0,
+                            'sheetId': sheet_id,
                             'startRowIndex': 0,
                             'endRowIndex': 2,
                             'startColumnIndex': 13,
@@ -542,7 +579,7 @@ def write_to_spreadsheets():
                 {
                     'mergeCells': {
                         'range': {
-                            'sheetId': 0,
+                            'sheetId': sheet_id,
                             'startRowIndex': 0,
                             'endRowIndex': 1,
                             'startColumnIndex': 4,
@@ -554,7 +591,7 @@ def write_to_spreadsheets():
                 {
                     'mergeCells': {
                         'range': {
-                            'sheetId': 0,
+                            'sheetId': sheet_id,
                             'startRowIndex': 0,
                             'endRowIndex': 1,
                             'startColumnIndex': 8,
@@ -566,7 +603,7 @@ def write_to_spreadsheets():
                 {
                     'mergeCells': {
                         'range': {
-                            'sheetId': 0,
+                            'sheetId': sheet_id,
                             'startRowIndex': 1,
                             'endRowIndex': 2,
                             'startColumnIndex': 0,
@@ -578,7 +615,7 @@ def write_to_spreadsheets():
                 {
                     'mergeCells': {
                         'range': {
-                            'sheetId': 0,
+                            'sheetId': sheet_id,
                             'startRowIndex': 1,
                             'endRowIndex': 2,
                             'startColumnIndex': 10,
@@ -591,7 +628,7 @@ def write_to_spreadsheets():
                 {
                     'updateSheetProperties': {
                         'properties': {
-                            'sheetId': 0,
+                            'sheetId': sheet_id,
                             'gridProperties': {
                                 'frozenRowCount': 2
                             }
@@ -601,9 +638,48 @@ def write_to_spreadsheets():
                 }
             ]
         }).execute()
+        row_index = 3
+
+    else:
+        # Если первые две строки листа не пустые, то предполагаем, что заготовок уже существует.
+        # Найдём индекс первых двух пустых строк на листе, чтобы в дальнейшем начать с них запись:
+        while two_rows is not None:
+            row_index += 1
+            result = service.spreadsheets().values().get(
+                spreadsheetId=spreadsheet['spreadsheetId'],
+                range=title + '!A' + str(row_index) + ':O' + str(row_index + 1)) \
+                .execute()
+            two_rows = result.get('values')
+
+    n = 0
+    if row_index == 3:
+        # Если есть только заголовок, а данных нет,
+        # То начинаем вывод данных о матчах с третьей по счёту строчки таблицы:
+        n = row_index
+
+    if row_index > 3:
+        # Если какие-то данные о матчах уже присутствуют,
+        # сделаем отступ в одну строку от последнего матча:
+        n = row_index + 1
+        service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet['spreadsheetId'], body={
+            'requests': [
+                # Нарисуем границу для всех ячеек:
+                {
+                    'updateBorders': {
+                        'range': {
+                            'sheetId': sheet_id,
+                            'startRowIndex': row_index,
+                            'endRowIndex': row_index+1,
+                            'startColumnIndex': 0,
+                            'endColumnIndex': 15
+                        },
+                        'top': border
+                    }
+                }
+            ]
+        }).execute()
 
     # Выведем все матчи в цикле:
-    n = 3  # Начинаем вывод данных о матчах с третьей по счёту строчки таблицы
     previous_league_name = ''
     for i in range(0, matches_length):
         # Соберём строку str_personal_meetings для её последующего вывода:
@@ -679,7 +755,7 @@ def write_to_spreadsheets():
             {
                 'autoResizeDimensions': {
                     'dimensions': {
-                        'sheetId': 0,
+                        'sheetId': sheet_id,
                         'dimension': 'COLUMNS',  # COLUMNS - потому что столбец
                         'startIndex': 0,  # Столбцы нумеруются с нуля
                         'endIndex': 15  # startIndex берётся включительно, endIndex - НЕ включительно
@@ -690,7 +766,7 @@ def write_to_spreadsheets():
             {
                 "repeatCell": {
                     "range": {
-                        "sheetId": 0,
+                        "sheetId": sheet_id,
                         "startRowIndex": 0,
                         "endRowIndex": 515
                     },
@@ -726,7 +802,7 @@ def write_to_spreadsheets():
             {
                 'updateDimensionProperties': {
                     'range': {
-                        'sheetId': 0,
+                        'sheetId': sheet_id,
                         'dimension': 'COLUMNS',
                         'startIndex': 0,
                         'endIndex': 15
@@ -745,7 +821,7 @@ def write_to_spreadsheets():
 
 def main():
     # Подключимся к БД Microsoft Access через экземпляр ODBC
-    db = pyodbc.connect('DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=.\\RC_base2.mdb')
+    db = pyodbc.connect('DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=.\\RC_base2_lessdata.mdb')
     dbc = db.cursor()
     # Получим информацию из БД, занесём её в rows
     rows = dbc.execute('select * from [Leagues]').fetchall()
@@ -755,6 +831,7 @@ def main():
     league_length = len(rows)
     # Инициализируем список league[] и заполним его экземплярами класса League:
     global league
+    league.clear()
     for i in range(0, league_length):
         league.append(League(rows[i][1], rows[i][2], rows[i][3]))
 
@@ -781,21 +858,25 @@ def main():
     required_date = required_date.replace('  ', ' ')
 
     # Получим информацию о матчах в указанный день:
+    match.clear()
     get_matches()
-    # Получим информацию о личных встречах команд:
-    get_personal_meetengs()
-    # Достанем ссылки на календарь игр прошлых сезонов:
-    get_url_games_calendar_past_season()
-    # Получим информацию о количестве КК у команд за этот сезон, о дате последней КК:
-    get_kk_this_or_last_season(True)
-    # Получим информацию о количестве КК у команд за прошлый сезон, о дате последней КК
-    # (если она не была найдена в последнем сезоне):
-    get_kk_this_or_last_season(False)
-    # Запишем полученную информацию в Google Sheets:
-    write_to_spreadsheets()
 
-    # driver.close()
-    time.sleep(1)
+    if matches_length > 0:
+        # Получим информацию о личных встречах команд:
+        #get_personal_meetengs()
+        # Достанем ссылки на календарь игр прошлых сезонов:
+        #get_url_games_calendar_past_season()
+        # Получим информацию о количестве КК у команд за этот сезон, о дате последней КК:
+        #get_kk_this_or_last_season(True)
+        # Получим информацию о количестве КК у команд за прошлый сезон, о дате последней КК
+        # (если она не была найдена в последнем сезоне):
+        #get_kk_this_or_last_season(False)
+        # Запишем полученную информацию в Google Sheets:
+        write_to_spreadsheets()
+    else:
+        print('Ни в одной из лиг не найдено матчей на ' + required_date + '!')
+    # Завершим сессию браузера и закроем его окно:
+    driver.quit()
 
 
 if __name__ == '__main__':
