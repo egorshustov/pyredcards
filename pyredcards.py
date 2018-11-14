@@ -1,5 +1,7 @@
 import pyodbc
 import httplib2
+import requests
+import json
 import apiclient.discovery
 from oauth2client.service_account import ServiceAccountCredentials
 import os
@@ -9,6 +11,7 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.options import Options
 from bs4 import BeautifulSoup
+from lxml import html
 import time
 import datetime
 import locale
@@ -53,6 +56,7 @@ class WorkerThread(QThread):
     def run(self):
         # Вызываем главную функцию:
         main()
+        self.exec_()
 
 
 class ReportThread(QThread):
@@ -62,6 +66,7 @@ class ReportThread(QThread):
 
     def run(self):
         write_to_spreadsheets()
+        self.exec_()
 
 
 class League:
@@ -74,6 +79,7 @@ class League:
         self.url_referee_statistics = ''
         self.url_games_calendar_past_season = ''
         self.matches_found = True
+        self.referees_found = False
 
 
 class Match:
@@ -116,6 +122,18 @@ class Match:
         self.teamsstring = ''
 
 
+class MatchChampionat:
+
+    def __init__(self):
+        self.match_url = ''  # ссылка на матч
+        self.league_name = ''  # Лига
+        self.team_home_name = ''  # Дома
+        self.team_away_name = ''  # Гости
+        self.referee_name = ''  # Судья, Имя на championat
+        self.teamsstring = ''
+        self.score = 0
+
+
 def datestring_to_unix(datestring):
     # Преобразует строку типа 'суббота, окт 27 2018' в unix-формат.
     # Удалим день недели:
@@ -142,7 +160,7 @@ def get_matches():
     ##################################################################################
     # МАТЧИ ЗА ДЕНЬ
     ##################################################################################
-    print('Найдём матчи для каждой из лиг в указанный день:')
+    print('Найдём матчи для каждой из лиг на ' + datestring_format(required_date) + ':')
     global match
     i_match = 0
     # Для каждой лиги переходим на страницу Календаря Игр сайта whoscored:
@@ -429,6 +447,138 @@ def get_kk_this_or_last_season(this_season):
         print('Информация о КК за текущий сезон получена.')
     else:
         print('Информация о КК за прошлый сезон получена.')
+
+
+def get_referee_championat():
+    ##################################################################################
+    # ПОЛУЧИМ ИМЯ СУДЬИ НА CHAMPIONAT И СОПОСТАВИМ МАТЧИ НА ОБОИХ САЙТАХ
+    ##################################################################################
+    print('Начинаем парсинг championat.com (получим имя судьи для матчей):')
+    date = datestring_format(required_date)
+    date = date.replace('-', '.')
+    h = httplib2.Http()  # disable_ssl_certificate_validation=True
+    # Инициализируем список элементов класса MatchChampionat:
+    match_championat = []
+    i_match_champ = 0
+    # Для каждой лиги:
+    for i in range(0, league_length):
+        # Но только если в лиге найдены матчи:
+        if league[i].matches_found:
+            # Получим страницу календаря игр для каждой лиги:
+            tournament_fixture_championat = h.request(league[i].url_championat, 'GET')
+            # Разобъём с помощью указанной даты страницу календаря игр на строки:
+            all_matches = tournament_fixture_championat[1].decode('utf-8').split(date)
+            # Пройдёмся с первого по последний элемент в списке полученных строк
+            # (каждая строка содержит информацию об отдельном матче):
+            for j in range(1, len(all_matches)):
+                match_championat.append(MatchChampionat())
+                # Занесём в массив название текущей лиги:
+                match_championat[i_match_champ].league_name = league[i].league_name
+                soup = BeautifulSoup(all_matches[j], 'html.parser')
+                # Получим все теги 'a' в строке:
+                all_a_tags = soup.findAll('a')
+                # Первый тег содержит имя домашней команды:
+                match_championat[i_match_champ].team_home_name = all_a_tags[0].text
+                # Второй тег содержит имя гостевой команды:
+                match_championat[i_match_champ].team_away_name = all_a_tags[1].text
+                # Третий тег содержит ссылку на будущий матч двух команд:
+                match_championat[i_match_champ].match_url = 'https://www.championat.com' + all_a_tags[2]['href']
+
+                # Выполним новый GET-запрос чтобы получить имя судьи (для этого перейдём по match_url):
+                match_page = h.request(match_championat[i_match_champ].match_url, 'GET')
+                # Страницв закодирована с utf-8, раскодируем её:
+                match_page_st = match_page[1].decode('utf-8')
+                if 'Главный судья:' in match_page_st:
+                    # Если строка 'Главный судья: ' присутствует на странице, то судья известен. Спарсим его имя:
+                    tree = html.fromstring(match_page_st)
+                    # Получим элемент с именем судьи по его XPath с помощью библиотеки lxml:
+                    referee_element = tree.xpath('/html/body/div[5]/div[6]/div[1]/div/div/div[4]/div[2]/div[1]/a')[0]
+                    match_championat[i_match_champ].referee_name = referee_element.text
+                    league[i].referees_found = True
+                else:
+                    # Если строка 'Главный судья: ' не присутствует на странице, то судья пока известен.
+                    # Занесём 'No_Info' вместо его имени:
+                    match_championat[i_match_champ].referee_name = 'No_Info'
+                    print('Для матча ' + match_championat[i_match_champ].team_home_name + '-' +
+                          match_championat[i_match_champ].team_away_name + ' лиги ' +
+                          match_championat[i_match_champ].league_name + ' судья ещё не известен!')
+                i_match_champ += 1
+
+    print('Парсинг championat.com завершён.')
+
+    print('Сопоставим матчи на whoscored и championat (проверь соответствие строк!):')
+    # Cольём названия команд в одну строку и удалим пробелы, чтобы выполнить побуквенное сравнение:
+    for i in range(0, matches_length):
+        match[i].teamsstring = (match[i].team_home_name + match[i].team_away_name).replace(' ', '')
+    for i in range(0, len(match_championat)):
+        match_championat[i].teamsstring = (match_championat[i].team_home_name + match_championat[i].team_away_name).\
+            replace(' ', '')
+
+    # Выполним побуквенное сравнение массивов match[].teamsstring и match_championat[].teamsstring
+    # и найдём соответствие для матчей, спарсенных с whoscored, матчам, спарсенным с championat,
+    # для того, чтобы заполнить массив match[].referee_name_championat
+    # (найти имя судьи на championat для каждого найденного матча на whoscored):
+
+    # Для каждой лиги:
+    for i in range(0, league_length):
+        # Но только если в лиге найдены матчи:
+        if league[i].matches_found:
+            # Пройдёмся по всем матчам, найденным на сайте whoscored:
+            for j in range(0, matches_length):
+                # которые принадлежат i-той лиге:
+                if match[j].league_name == league[i].league_name:
+                    # Возьмём строку с названиями двух команд (на сайте whoscored) и в цикле пройдемся по ней,
+                    # перебирая каждые её два символа, идущие подряд, с шагом, равным 1
+                    # (пройдёмся по строке "стяжками"):
+                    incr = 0
+                    while len(match[j].teamsstring[incr:incr+2]) == 2:
+                        # Если длина стяжка по прежнему равна 2 (строка не заканчивается),
+                        # то получим этот двухсимвольный стяжок и запишем его в переменную two_symbols:
+                        two_symbols = match[j].teamsstring[incr:incr+2]
+                        # Найдём вхождения этого стяжка в каждую из строк массива match_championat[].teamsstring:
+                        for n in range(0, len(match_championat)):
+                            if match_championat[n].league_name == league[i].league_name:
+                                if two_symbols in match_championat[n].teamsstring:
+                                    # Если вхождение найдено,
+                                    # добавим "очко" этому матчу, найденному на championat:
+                                    match_championat[n].score += 1
+                        incr += 1
+
+                    # Выполнили перебор и подсчёт количества совпадений
+                    # (очков match_championat[].score) для каждой строки массива match_championat[].teamsstring,
+                    # теперь найдём максимальное значение match_championat[].score в массиве match_championat[]
+                    # и запомним индекс этого элемента массива
+                    # (именно этот элемент и будет содержать информацию о судье для матча whoscored):
+                    max_score = 0
+                    max_score_index = 0
+                    for n in range(0, len(match_championat)):
+                        if match_championat[n].league_name == league[i].league_name:
+                            if max_score < match_championat[n].score:
+                                max_score = match_championat[n].score
+                                max_score_index = n
+
+                    # Выведем строки с названиями команд на whoscored и championat для проверки пользователем:
+                    whoscored_matchstring = match[j].teamsstring
+                    founded_championat_matchstring = match_championat[max_score_index].teamsstring
+                    print(whoscored_matchstring + ' = ' + founded_championat_matchstring
+                          + ' (' + str(max_score) + ' совпадений);')
+
+                    match[j].referee_name_championat = match_championat[max_score_index].referee_name
+                    if match[j].referee_name_championat != 'No_Info':
+                        translate_url = 'https://translate.yandex.net/api/v1.5/tr.json/translate?key=' \
+                                        'trnsl.1.1.20180922T150311Z.5ccad8013c0e69ed.3d4026b2fe47ae4dd0' \
+                                        'cc09e8e9017f678fcbe3d9&text=' + match[j].referee_name_championat +\
+                                        '&lang=ru-en'
+                        translated_responce = requests.get(translate_url)
+                        # Сконвертируем тип bytes в словарь dict:
+                        translated_dict = json.loads(translated_responce.content)
+                        match[j].referee_name_championat_translated_to_en = translated_dict['text'][0]
+
+                    # Обнулим все match_championat[].score, перед тем, как перейти к следующему матчу match[j]:
+                    for n in range(0, len(match_championat)):
+                        match_championat[n].score = 0
+
+    print('Сопоставление завершено.')
 
 
 def write_to_spreadsheets():
@@ -862,6 +1012,7 @@ def main():
     get_matches()
 
     if matches_length > 0:
+        # Если матчи найдены:
         # Получим информацию о личных встречах команд:
         #get_personal_meetengs()
         # Достанем ссылки на календарь игр прошлых сезонов:
@@ -871,10 +1022,12 @@ def main():
         # Получим информацию о количестве КК у команд за прошлый сезон, о дате последней КК
         # (если она не была найдена в последнем сезоне):
         #get_kk_this_or_last_season(False)
+        # Получим имя судьи на championat и сопоставим матчи на championat и whoscored:
+        get_referee_championat()
         # Запишем полученную информацию в Google Sheets:
-        write_to_spreadsheets()
+        #write_to_spreadsheets()
     else:
-        print('Ни в одной из лиг не найдено матчей на ' + required_date + '!')
+        print('Ни в одной из лиг не найдено матчей на ' + datestring_format(required_date) + '!')
     # Завершим сессию браузера и закроем его окно:
     driver.quit()
 
