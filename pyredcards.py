@@ -134,6 +134,14 @@ class MatchChampionat:
         self.score = 0
 
 
+class Referee:
+
+    def __init__(self):
+        self.referee_name_whoscored = ''  # Судья, Имя на whoscored
+        self.referee_url = ''  # Судья, URL на whoscored
+        self.score = 0
+
+
 def datestring_to_unix(datestring):
     # Преобразует строку типа 'суббота, окт 27 2018' в unix-формат.
     # Удалим день недели:
@@ -581,6 +589,104 @@ def get_referee_championat():
     print('Сопоставление завершено.')
 
 
+def get_referee_whoscored():
+    ##################################################################################
+    # ПОЛУЧИМ ИМЕНА СУДЕЙ И ИХ URL НА WHOSCORED
+    ##################################################################################
+    print('Получим имена судей и их Url на whoscored:')
+    referee = []
+    # Для каждой лиги:
+    for i in range(0, league_length):
+        # Но только если в лиге найдены судьи (на сайте championat):
+        if league[i].referees_found:
+            i_referee = 0
+            driver.get(league[i].url_referee_statistics)
+            time.sleep(sleep_page_time)
+            end_tag_found = False
+            # Пока не найдём последний тег:
+            while not end_tag_found:
+                # Получим тело таблицы "Статистика Рефери":
+                referee_tournaments = ui.WebDriverWait(driver, 15).until(
+                    lambda driver1: driver.find_element_by_id('referee-tournaments-table-body'))
+                referee_tournaments_innerhtml = referee_tournaments.get_property('innerHTML')
+                soup = BeautifulSoup(referee_tournaments_innerhtml, 'html.parser')
+                # Получим теги всех судей на текущей странице таблицы:
+                referees_tags = soup.findAll('tr')
+                for referee_tag in referees_tags:
+                    # Пройдёмся по каждому полученному тегу и спарсим из него ссылку на судью и имя судьи на whoscored.
+                    # Попробуем получить тег 'a' с классом tournament-link, содержащий информацию о судье:
+                    tournament_link_tag = referee_tag.find('a', {'class': 'tournament-link'})
+                    if tournament_link_tag is not None:
+                        # Если тег 'a' с классом tournament-link имеется в теге referee_tag,
+                        # достанем из него информацию:
+                        referee.append(Referee())
+                        referee[i_referee].referee_url = 'https://ru.whoscored.com' +\
+                                                         referee_tag.find('a', {'class': 'tournament-link'})['href']
+                        referee[i_referee].referee_name_whoscored =\
+                            referee_tag.find('a', {'class': 'tournament-link'}).text
+                        i_referee += 1
+                    else:
+                        # Значит, referee_tag - это итоговый тег таблицы, содержащий строку 'Сумма/Среднее количество':
+                        end_tag_found = True
+                # Если итоговый тег таблицы не был найден, значит таблицу можно листать дальше:
+                if not end_tag_found:
+                    # time.sleep(sleep_table_time)
+                    driver.find_element_by_css_selector('#next').click()
+                    time.sleep(sleep_table_time)  # Пауза для прогрузки таблицы
+
+            # Найдём самого созвучного судью для каждого матча, где referee_name_championat != "No_Info"
+            # и занесём его имя и url в массив match[]:
+            print('Сопоставим имена судей на championat и whoscored (проверь соответствие строк!):')
+            # Пройдёмся по всем матчам, найденным на сайте whoscored:
+            for j in range(0, matches_length):
+                # которые принадлежат i-той лиге и по которым известны судьи:
+                if match[j].league_name == league[i].league_name and match[j].referee_name_championat != 'No_Info':
+                    # Возьмём строку с переведённым на английский именем судьи
+                    # (match[j].referee_name_championat_translated_to_en) и в цикле пройдемся по ней,
+                    # перебирая каждые её два символа, идущие подряд, с шагом, равным 1
+                    # (пройдёмся по строке "стяжками"):
+                    incr = 0
+                    while len(match[j].referee_name_championat_translated_to_en[incr:incr+2]) == 2:
+                        # Если длина стяжка по прежнему равна 2 (строка не заканчивается),
+                        # то получим этот двухсимвольный стяжок и запишем его в переменную two_symbols:
+                        two_symbols = match[j].referee_name_championat_translated_to_en[incr:incr+2]
+                        # Найдём вхождения этого стяжка в каждую из строк массива referee[].referee_name_whoscored:
+                        for n in range(0, len(referee)):
+                            if two_symbols in referee[n].referee_name_whoscored:
+                                # Если вхождение найдено,
+                                # добавим 'очко' этому судье:
+                                referee[n].score += 1
+                        incr += 1
+
+                    # Выполнили перебор и подсчёт количества совпадений
+                    # (очков referee[].score) для каждого судьи массива referee[],
+                    # теперь найдём максимальное значение referee[].score в массиве referee[]
+                    # и запомним индекс этого элемента массива
+                    # (именно этот элемент и будет содержать информацию об имени судьи и его Url на whoscored):
+                    max_score = 0
+                    max_score_index = 0
+                    for n in range(0, len(referee)):
+                        if max_score < referee[n].score:
+                            max_score = referee[n].score
+                            max_score_index = n
+
+                    # Выведем строки с именами судей на championat и whoscored для проверки пользователем:
+                    match[j].referee_name_whoscored = referee[max_score_index].referee_name_whoscored
+                    match[j].referee_url = referee[max_score_index].referee_url
+
+                    print(match[j].referee_name_championat + ' = ' + match[j].referee_name_whoscored
+                          + ' (' + str(max_score) + ' совпадений);')
+
+                    # Обнулим все referee[].score, перед тем, как перейти к следующему матчу match[j]:
+                    for n in range(0, len(referee)):
+                        referee[n].score = 0
+
+            print('Получили данные по судьям лиги ' + league[i].league_name + '.')
+            referee.clear()
+
+    print('Имена судей и их Url на whoscored получены.')
+
+
 def write_to_spreadsheets():
     ##################################################################################
     # ВЫВОД ДАННЫХ МАССИВА match[] В GOOGLE SHEETS
@@ -1024,6 +1130,8 @@ def main():
         #get_kk_this_or_last_season(False)
         # Получим имя судьи на championat и сопоставим матчи на championat и whoscored:
         get_referee_championat()
+        # Получим имя судьи и его Url на whoscored:
+        get_referee_whoscored()
         # Запишем полученную информацию в Google Sheets:
         #write_to_spreadsheets()
     else:
