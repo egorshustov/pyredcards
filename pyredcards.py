@@ -100,11 +100,15 @@ class Match:
         self.referee_this_season_matches_count = -1
         self.referee_all_seasons_average = ''  # Судья, Все сезоны
         self.referee_all_seasons_matches_count = -1
-        self.referee_to_team_home_average = ''  # Судья, Командам
+        self.referee_team_home = False  # Судья, Командам
+        self.referee_to_team_home_average = ''
+        self.referee_team_home_matches_count = -1
+        self.referee_team_away = False
         self.referee_to_team_away_average = ''
+        self.referee_team_away_matches_count = -1
         self.referee_last_twenty_home_count = 0  # Судья, Посл. 20 игр
         self.referee_last_twenty_away_count = 0
-        self.referee_last_twenty_last_kk_date = ''
+        self.referee_last_twenty_last_kk_date = '-'
         self.team_home_kk_this_season_count = 0  # Команды, КК этот сезон
         self.team_away_kk_this_season_count = 0
         self.team_home_found_in_last_season = False  # Команды, КК предыдущий сезон
@@ -120,6 +124,7 @@ class Match:
         self.personal_meetings_count = 0
         self.teams_personal_meetings_last_kk_date = ''
         self.teamsstring = ''
+        self.championat_teamsstring = ''
 
 
 class MatchChampionat:
@@ -174,9 +179,9 @@ def get_matches():
     # Для каждой лиги переходим на страницу Календаря Игр сайта whoscored:
     for i in range(0, league_length):
         next_clicked = True
+        print('Лига ' + league[i].league_name + '...')
         driver.get(league[i].url_whoscored)
         time.sleep(sleep_page_time)  # Пауза для прогрузки страницы
-        print('Лига ' + league[i].league_name + '...')
 
         # Параллельно получим ссылку на прошлый сезон каждой лиги:
         league[i].url_past_season = 'https://ru.whoscored.com' +\
@@ -571,6 +576,7 @@ def get_referee_championat():
                     print(whoscored_matchstring + ' = ' + founded_championat_matchstring
                           + ' (' + str(max_score) + ' совпадений);')
 
+                    match[j].championat_teamsstring = match_championat[max_score_index].teamsstring
                     match[j].referee_name_championat = match_championat[max_score_index].referee_name
                     if match[j].referee_name_championat != 'No_Info':
                         translate_url = 'https://translate.yandex.net/api/v1.5/tr.json/translate?key=' \
@@ -687,6 +693,148 @@ def get_referee_whoscored():
     print('Имена судей и их Url на whoscored получены.')
 
 
+def get_referee_info():
+    ##################################################################################
+    # ПОЛУЧИМ ИНФОРМАЦИЮ ПО СУДЬЕ С WHOSCORED
+    ##################################################################################
+    print('Получим информацию по судье с whoscored:')
+    for i in range(0, matches_length):
+        if match[i].referee_name_championat != 'No_Info':
+            driver.get(match[i].referee_url)
+            time.sleep(1.5*sleep_page_time)
+            # Получим таблицу 'Турниры':
+            referee_tournaments = ui.WebDriverWait(driver, 15).until(
+                lambda driver1: driver.find_element_by_id('referee-tournaments-table-body'))
+            referee_tournaments_innerhtml = referee_tournaments.get_property('innerHTML')
+            # Достанем из неё среднее количество КК за текущий сезон:
+            soup = BeautifulSoup(referee_tournaments_innerhtml, 'html.parser')
+            # Получим теги всех лиг, которые судил текущий судья:
+            leagues_tags = soup.findAll('tr')
+
+            for league_tag in leagues_tags:
+                # Пройдёмся по каждому полученному тегу и определим, в каком из них находится интересующая нас лига:
+                if match[i].league_name in league_tag.text:
+                    # Нужная лига найдена! Получим информацию о поведении судьи в этой лиге:
+                    td_tags = league_tag.findAll('td')
+                    match[i].referee_this_season_matches_count = int(td_tags[2].text)
+                    match[i].referee_this_season_average = td_tags[8].text
+                    break
+
+            # Нажмём на кнопки 'Все' для таблиц 'Турниры' и 'Команды':
+            driver.find_element_by_id('alltime-referee-stats').click()
+            driver.find_element_by_css_selector('#referee-team-filter-summary > div:nth-child(2) > div:nth-child(2)'
+                                                ' > dl:nth-child(1) > dd:nth-child(3) > a:nth-child(1)').click()
+            time.sleep(sleep_table_time)  # Пауза для прогрузки таблицы
+
+            # Получим тело таблицы 'Последние Матчи':
+            latest_matches = ui.WebDriverWait(driver, 15).until(
+                lambda driver1: driver.find_element_by_css_selector('.fixture > tbody:nth-child(2)'))
+            latest_matches_innerhtml = latest_matches.get_property('innerHTML')
+            # Достанем из неё информацию о количестве КК дома и в гостях, которые дал судья за последние 20 матчей,
+            # дату последней КК:
+            soup = BeautifulSoup(latest_matches_innerhtml, 'html.parser')
+            # Получим теги всех последних 20 матчей, которые судил текущий судья:
+            matches_tags = soup.findAll('tr')
+            for match_tag in matches_tags:
+                # Пройдёмся по каждому полученному тегу:
+                red_cards = match_tag.find('span', {'class': 'incidents-icon ui-icon red'})
+                if red_cards is not None:
+                    # Красные карточки (одна или больше) найдены в матче.
+                    # Если это первая КК, с которой мы столкнулись в таблице, получим её дату (это дата последней КК):
+                    if match[i].referee_last_twenty_home_count == 0 and match[i].referee_last_twenty_away_count == 0:
+                        match[i].referee_last_twenty_last_kk_date = match_tag.find('td', {'class': 'date'}).text
+                    # Получим теги с классами referee-home-data и referee-away-data:
+                    referee_home_data = match_tag.find('td', {'class': 'referee-home-data'})
+                    # Попробуем найти КК в referee_home_data:
+                    red_cards = referee_home_data.find('span', {'class': 'incidents-icon ui-icon red'})
+                    if red_cards is not None:
+                        # Получим все incidents-wrapper в referee_home_data:
+                        incidents_wrappers = referee_home_data.findAll('div', {'class': 'incidents-wrapper'})
+                        # Пройдёмся по всем incidents-wrapper в цикле:
+                        for incidents_wrapper in incidents_wrappers:
+                            # Попробуем найти КК в incidents_wrapper:
+                            red_cards = incidents_wrapper.find('span', {'class': 'incidents-icon ui-icon red'})
+                            if red_cards is not None:
+                                # Если КК присутствуют в incidents_wrapper, спарсим их количество:
+                                match[i].referee_last_twenty_home_count += int(incidents_wrapper.text.replace('x', ''))
+                                break
+
+                    referee_away_data = match_tag.find('td', {'class': 'referee-away-data'})
+                    # Попробуем найти КК в referee_away_data:
+                    red_cards = referee_away_data.find('span', {'class': 'incidents-icon ui-icon red'})
+                    if red_cards is not None:
+                        # Получим все incidents-wrapper в referee_away_data:
+                        incidents_wrappers = referee_away_data.findAll('div', {'class': 'incidents-wrapper'})
+                        # Пройдёмся по всем incidents-wrapper в цикле:
+                        for incidents_wrapper in incidents_wrappers:
+                            # Попробуем найти КК в incidents_wrapper:
+                            red_cards = incidents_wrapper.find('span', {'class': 'incidents-icon ui-icon red'})
+                            if red_cards is not None:
+                                # Если КК присутствуют в incidents_wrapper, спарсим их количество:
+                                match[i].referee_last_twenty_away_count += int(incidents_wrapper.text.replace('x', ''))
+                                break
+
+            # Получим таблицу 'Турниры' (теперь с нажатой кнопкой 'все'):
+            referee_tournaments = ui.WebDriverWait(driver, 15).until(
+                lambda driver1: driver.find_element_by_id('referee-tournaments-table-body'))
+            referee_tournaments_innerhtml = referee_tournaments.get_property('innerHTML')
+            # Достанем из неё среднее количество КК за все сезоны:
+            soup = BeautifulSoup(referee_tournaments_innerhtml, 'html.parser')
+            # Получим теги всех лиг, которые судил текущий судья:
+            leagues_tags = soup.findAll('tr')
+
+            for league_tag in leagues_tags:
+                # Пройдёмся по каждому полученному тегу и определим, в каком из них находится интересующая нас лига:
+                if match[i].league_name in league_tag.text:
+                    # Нужная лига найдена! Получим информацию о поведении судьи в этой лиге:
+                    td_tags = league_tag.findAll('td')
+                    match[i].referee_all_seasons_matches_count = int(td_tags[2].text)
+                    match[i].referee_all_seasons_average = td_tags[8].text
+                    break
+
+            end_tag_found = False
+            while (not end_tag_found) and (not match[i].referee_team_home or not match[i].referee_team_away):
+                # Получим таблицу 'Команды' (с нажатой кнопкой 'все'):
+                referee_teams = ui.WebDriverWait(driver, 15).until(
+                    lambda driver1: driver.find_element_by_css_selector('#referee-team-table-summary > div:nth-child(1)'
+                                                                        ' > table:nth-child(1) > tbody:nth-child(2)'))
+                referee_teams_innerhtml = referee_teams.get_property('innerHTML')
+                # Достанем из неё среднее количество КК для каждой из команд:
+                soup = BeautifulSoup(referee_teams_innerhtml, 'html.parser')
+                # Получим теги всех команд, которые судил текущий судья:
+                teams_tags = soup.findAll('tr')
+                for team_tag in teams_tags:
+                    tournament_link_tag = team_tag.find('a', {'class': 'tournament-link'})
+                    if tournament_link_tag is not None:
+                        if match[i].team_home_name in tournament_link_tag.text:
+                            match[i].referee_team_home = True
+                            td_tags = team_tag.findAll('td')
+                            match[i].referee_team_home_matches_count = int(td_tags[2].text)
+                            match[i].referee_to_team_home_average = td_tags[8].text
+                        if match[i].team_away_name in tournament_link_tag.text:
+                            match[i].referee_team_away = True
+                            td_tags = team_tag.findAll('td')
+                            match[i].referee_team_away_matches_count = int(td_tags[2].text)
+                            match[i].referee_to_team_away_average = td_tags[8].text
+                        # Если уже нашли обе команды в таблице, то нет смысла листать её дальше:
+                        if match[i].referee_team_home and match[i].referee_team_away:
+                            break
+                    else:
+                        # Значит, referee_tag - это итоговый тег таблицы, содержащий строку 'Сумма/Среднее количество':
+                        end_tag_found = True
+                # Если итоговый тег таблицы не был найден, значит таблицу можно листать дальше:
+                if (not end_tag_found) and (not (match[i].referee_team_home and match[i].referee_team_away)):
+                    driver.find_element_by_css_selector('#next').click()
+                    time.sleep(sleep_table_time)  # Пауза для прогрузки таблицы
+
+            if not match[i].referee_team_home:
+                print('Судья '+match[i].referee_name_whoscored+' не судил команду '+match[i].team_home_name+'!')
+            if not match[i].referee_team_away:
+                print('Судья '+match[i].referee_name_whoscored+' не судил команду '+match[i].team_away_name+'!')
+
+    print('Информация по судье успешно получена.')
+
+
 def write_to_spreadsheets():
     ##################################################################################
     # ВЫВОД ДАННЫХ МАССИВА match[] В GOOGLE SHEETS
@@ -730,7 +878,7 @@ def write_to_spreadsheets():
                             'index': 0,  # Порядковый номер листа в списке листов. Если 0 - то самый левый
                             "gridProperties": {
                                 "rowCount": 1000,
-                                "columnCount": 15
+                                "columnCount": 16
                             }
                         }
                     }
@@ -751,7 +899,7 @@ def write_to_spreadsheets():
                         'title': title,
                         # 'index': number,
                         'gridProperties': {
-                            'columnCount': 15
+                            'columnCount': 16
                         },
                     },
                     'fields': 'title, gridProperties(columnCount)'
@@ -773,7 +921,7 @@ def write_to_spreadsheets():
     # Прочитаем первые две строки листа:
     row_index = 1
     result = service.spreadsheets().values().get(
-        spreadsheetId=spreadsheet['spreadsheetId'], range=title+'!A' + str(row_index) + ':O' + str(row_index + 1))\
+        spreadsheetId=spreadsheet['spreadsheetId'], range=title+'!A' + str(row_index) + ':P' + str(row_index + 1))\
         .execute()
     two_rows = result.get('values')
 
@@ -783,15 +931,16 @@ def write_to_spreadsheets():
             'valueInputOption': 'USER_ENTERED',
             'data': [
                 {
-                    'range': title+'!A1:O2',
+                    'range': title+'!A1:P2',
                     'majorDimension': 'ROWS',
                     # сначала заполнять ряды, затем столбцы (т.е. самые внутренние списки в values - это ряды)
                     'values':
                     [
-                        ['Лига', 'Дома', 'Гости', 'Дата', 'Судья', '', '', '', 'Команды', '', '', '', '', '', 'Судья'],
+                        ['Лига', 'Дома', 'Гости', 'Дата', 'Судья', '', '', '', 'Команды', '', '', '', '', '',
+                         'Проверь судей', 'Проверь команды'],
                         ['', '', '', '', 'Этот сезон', 'Все сезоны', 'Командам', 'Посл. 20 игр', 'КК этот сезон',
                          'КК прош. сезон', 'Дата последней 1/2', '', 'Личные встречи', '',
-                         'Имя на Championat (имя на Whoscored)']
+                         'На Championat (на Whoscored)', 'На Championat (на Whoscored)']
                     ]
                 }
             ]
@@ -806,7 +955,7 @@ def write_to_spreadsheets():
                             'startRowIndex': 0,
                             'endRowIndex': 2,
                             'startColumnIndex': 0,
-                            'endColumnIndex': 15
+                            'endColumnIndex': 16
                         },
                         'top': border,
                         'bottom': border,
@@ -903,7 +1052,7 @@ def write_to_spreadsheets():
             row_index += 1
             result = service.spreadsheets().values().get(
                 spreadsheetId=spreadsheet['spreadsheetId'],
-                range=title + '!A' + str(row_index) + ':O' + str(row_index + 1)) \
+                range=title + '!A' + str(row_index) + ':P' + str(row_index + 1)) \
                 .execute()
             two_rows = result.get('values')
 
@@ -927,7 +1076,7 @@ def write_to_spreadsheets():
                             'startRowIndex': row_index,
                             'endRowIndex': row_index+1,
                             'startColumnIndex': 0,
-                            'endColumnIndex': 15
+                            'endColumnIndex': 16
                         },
                         'top': border
                     }
@@ -938,6 +1087,33 @@ def write_to_spreadsheets():
     # Выведем все матчи в цикле:
     previous_league_name = ''
     for i in range(0, matches_length):
+        # Подготовим информацию по судье для её последующего вывода:
+        referee_this_season = ''
+        referee_all_seasons = ''
+        referee_team_home = ''
+        referee_team_away = ''
+        referee_last_twenty = ''
+        if match[i].referee_name_championat != 'No_Info':
+            referee_this_season = \
+                match[i].referee_this_season_average + ' за ' + str(match[i].referee_this_season_matches_count)
+            referee_all_seasons = \
+                match[i].referee_all_seasons_average + ' за ' + str(match[i].referee_all_seasons_matches_count)
+
+            if match[i].referee_team_home:
+                referee_team_home = match[i].referee_to_team_home_average + ' за '\
+                                    + str(match[i].referee_team_home_matches_count)
+            else:
+                referee_team_home = 'Не судил'
+
+            if match[i].referee_team_away:
+                referee_team_away = match[i].referee_to_team_away_average + ' за '\
+                                    + str(match[i].referee_team_away_matches_count)
+            else:
+                referee_team_away = 'Не судил'
+
+            referee_last_twenty = str(match[i].referee_last_twenty_home_count) + 'д' + str(
+                match[i].referee_last_twenty_away_count) + 'г ' + match[i].referee_last_twenty_last_kk_date
+
         # Соберём строку str_personal_meetings для её последующего вывода:
         if ((match[i].team_home_personal_meetings_kk_count_home != -1) and
                 (match[i].team_home_personal_meetings_kk_count_away != -1) and
@@ -984,21 +1160,25 @@ def write_to_spreadsheets():
             'valueInputOption': 'USER_ENTERED',
             'data': [
                 {
-                    'range': title+'!A'+str(n)+':O'+str(n)+'',
+                    'range': title+'!A'+str(n)+':P'+str(n)+'',
                     'majorDimension': 'ROWS',
                     # сначала заполнять ряды, затем столбцы (т.е. самые внутренние списки в values - это ряды)
                     'values':
                         [
-                            # ['Лига', 'Дома', 'Гости', 'Дата', 'Судья', '', '', '', 'Команды', '', '', '', '', '', 'Судья']
                             [match[i].league_name, match[i].team_home_name, match[i].team_away_name,
-                             match[i].match_datetime, '', '', '', '',
+                             match[i].match_datetime,
+                             referee_this_season, referee_all_seasons,
+                             referee_team_home + '/' + referee_team_away,
+                             referee_last_twenty,
                              str(match[i].team_home_kk_this_season_count) + '/' +
                              str(match[i].team_away_kk_this_season_count),
                              str_team_home_kk_last_season_count + '/' +
                              str_team_away_kk_last_season_count,
                              match[i].team_home_last_kk_date, match[i].team_away_last_kk_date,
                              str_personal_meetings,
-                             '', '']
+                             '',
+                             match[i].referee_name_championat + ' (' + match[i].referee_name_whoscored + ')',
+                             match[i].championat_teamsstring + ' (' + match[i].teamsstring + ')']
                         ]
                 }
             ]
@@ -1014,7 +1194,7 @@ def write_to_spreadsheets():
                         'sheetId': sheet_id,
                         'dimension': 'COLUMNS',  # COLUMNS - потому что столбец
                         'startIndex': 0,  # Столбцы нумеруются с нуля
-                        'endIndex': 15  # startIndex берётся включительно, endIndex - НЕ включительно
+                        'endIndex': 16  # startIndex берётся включительно, endIndex - НЕ включительно
                     }
                 }
             },
@@ -1061,7 +1241,7 @@ def write_to_spreadsheets():
                         'sheetId': sheet_id,
                         'dimension': 'COLUMNS',
                         'startIndex': 0,
-                        'endIndex': 15
+                        'endIndex': 16
                     },
                     'properties': {
                         'pixelSize': 160
@@ -1077,7 +1257,7 @@ def write_to_spreadsheets():
 
 def main():
     # Подключимся к БД Microsoft Access через экземпляр ODBC
-    db = pyodbc.connect('DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=.\\RC_base2_lessdata.mdb')
+    db = pyodbc.connect('DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=.\\RC_base2.mdb')
     dbc = db.cursor()
     # Получим информацию из БД, занесём её в rows
     rows = dbc.execute('select * from [Leagues]').fetchall()
@@ -1120,20 +1300,22 @@ def main():
     if matches_length > 0:
         # Если матчи найдены:
         # Получим информацию о личных встречах команд:
-        #get_personal_meetengs()
+        get_personal_meetengs()
         # Достанем ссылки на календарь игр прошлых сезонов:
-        #get_url_games_calendar_past_season()
+        get_url_games_calendar_past_season()
         # Получим информацию о количестве КК у команд за этот сезон, о дате последней КК:
-        #get_kk_this_or_last_season(True)
+        get_kk_this_or_last_season(True)
         # Получим информацию о количестве КК у команд за прошлый сезон, о дате последней КК
         # (если она не была найдена в последнем сезоне):
-        #get_kk_this_or_last_season(False)
+        get_kk_this_or_last_season(False)
         # Получим имя судьи на championat и сопоставим матчи на championat и whoscored:
         get_referee_championat()
         # Получим имя судьи и его Url на whoscored:
         get_referee_whoscored()
+        # Получим информацию по судье с whoscored::
+        get_referee_info()
         # Запишем полученную информацию в Google Sheets:
-        #write_to_spreadsheets()
+        write_to_spreadsheets()
     else:
         print('Ни в одной из лиг не найдено матчей на ' + datestring_format(required_date) + '!')
     # Завершим сессию браузера и закроем его окно:
