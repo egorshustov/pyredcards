@@ -718,6 +718,8 @@ def get_referee_info():
                     td_tags = league_tag.findAll('td')
                     match[i].referee_this_season_matches_count = int(td_tags[2].text)
                     match[i].referee_this_season_average = td_tags[8].text
+                    if match[i].referee_this_season_average == '0.00':
+                        match[i].referee_this_season_average = '0'
                     break
 
             # Нажмём на кнопки 'Все' для таблиц 'Турниры' и 'Команды':
@@ -790,6 +792,8 @@ def get_referee_info():
                     td_tags = league_tag.findAll('td')
                     match[i].referee_all_seasons_matches_count = int(td_tags[2].text)
                     match[i].referee_all_seasons_average = td_tags[8].text
+                    if match[i].referee_all_seasons_average == '0.00':
+                        match[i].referee_all_seasons_average = '0'
                     break
 
             end_tag_found = False
@@ -811,11 +815,16 @@ def get_referee_info():
                             td_tags = team_tag.findAll('td')
                             match[i].referee_team_home_matches_count = int(td_tags[2].text)
                             match[i].referee_to_team_home_average = td_tags[8].text
+                            if match[i].referee_to_team_home_average == '0.00':
+                                match[i].referee_to_team_home_average = '0'
                         if match[i].team_away_name in tournament_link_tag.text:
                             match[i].referee_team_away = True
                             td_tags = team_tag.findAll('td')
                             match[i].referee_team_away_matches_count = int(td_tags[2].text)
                             match[i].referee_to_team_away_average = td_tags[8].text
+                            if match[i].referee_to_team_away_average == '0.00':
+                                match[i].referee_to_team_away_average = '0'
+
                         # Если уже нашли обе команды в таблице, то нет смысла листать её дальше:
                         if match[i].referee_team_home and match[i].referee_team_away:
                             break
