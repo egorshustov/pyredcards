@@ -379,7 +379,7 @@ def get_url_games_calendar_past_season():
             league[i].url_games_calendar_past_season = \
                 driver.find_element_by_css_selector('#sub-navigation > ul:nth-child(1) >'
                                                     ' li:nth-child(2) > a:nth-child(1)').get_property('href')
-        wind.log('Ссылки успешно получены.')
+    wind.log('Ссылки успешно получены.')
 
 
 def get_kk_this_or_last_season(this_season):
@@ -633,12 +633,30 @@ def get_referee_whoscored():
     ##################################################################################
     # ПОЛУЧИМ ИМЕНА СУДЕЙ И ИХ URL НА WHOSCORED
     ##################################################################################
-    wind.log('Получим имена судей и их Url на whoscored:')
+    # Подключимся к БД Microsoft Access через экземпляр ODBC
+    db = pyodbc.connect('DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=.\\RC_base2.mdb')
+    dbc = db.cursor()
+    # Получим информацию о судьях, для которых чётко определено соответствие имён на championat и whoscored:
+    rows = dbc.execute('select * from [Referees]').fetchall()
+    db.close()
+    referee_line = []
+    # Считаем информацию о заданных судьях в двумерный список:
+    referee_defined = []
+    for i in range(0, len(rows)):
+        referee_line.clear()
+        referee_line.append(rows[i][1])
+        referee_line.append(rows[i][2])
+        referee_defined.append(referee_line)
+        referee_line = []
+
+    # Объявим список, в который будут загружены все судьи в таблице,
+    # для того, чтобы в дальнейшем выбрать наиболее подходящего:
     referee = []
     # Для каждой лиги:
     for i in range(0, league_length):
         # Но только если в лиге найдены судьи (на сайте championat):
         if league[i].referees_found:
+            wind.log('Получим данные по судьям лиги ' + league[i].league_name + '...')
             i_referee = 0
             driver.get(league[i].url_referee_statistics)
             time.sleep(sleep_page_time)
@@ -714,6 +732,18 @@ def get_referee_whoscored():
                     match[j].referee_name_whoscored = referee[max_score_index].referee_name_whoscored
                     match[j].referee_url = referee[max_score_index].referee_url
 
+                    # Пройдёмся по всему списку задефайненных судей:
+                    for k in range(0, len(referee_defined)):
+                        # Проверим, если данный судья уже задефайнен в БД:
+                        if match[j].referee_name_championat == referee_defined[k][0]:
+                            # Пройдёмся по всему списку судей текущей лиги:
+                            for n in range(0, len(referee)):
+                                # Если судья с задефайненым именем был найден в текущей лиге на whoscored:
+                                if referee[n].referee_name_whoscored == referee_defined[k][1]:
+                                    # Присвоим ему задефайненное имя и найденный ранее URL:
+                                    match[j].referee_name_whoscored = referee_defined[k][1]
+                                    match[j].referee_url = referee[n].referee_url
+
                     wind.log(match[j].referee_name_championat + ' = ' + match[j].referee_name_whoscored
                              + ' (' + str(max_score) + ' совпадений);')
 
@@ -724,16 +754,14 @@ def get_referee_whoscored():
             wind.log('Получили данные по судьям лиги ' + league[i].league_name + '.')
             referee.clear()
 
-    wind.log('Имена судей и их Url на whoscored получены.')
-
 
 def get_referee_info():
     ##################################################################################
     # ПОЛУЧИМ ИНФОРМАЦИЮ ПО СУДЬЕ С WHOSCORED
     ##################################################################################
-    wind.log('Получим информацию по судье с whoscored:')
     for i in range(0, matches_length):
         if match[i].referee_name_championat != '???':
+            wind.log('Получим информацию по судье ' + match[i].referee_name_whoscored + '...')
             driver.get(match[i].referee_url)
             time.sleep(1.5*sleep_page_time)
             # Получим таблицу 'Турниры':
@@ -873,8 +901,7 @@ def get_referee_info():
                 wind.log('Судья '+match[i].referee_name_whoscored+' не судил команду '+match[i].team_home_name+'!')
             if not match[i].referee_team_away:
                 wind.log('Судья '+match[i].referee_name_whoscored+' не судил команду '+match[i].team_away_name+'!')
-
-        wind.log('Информация по судье успешно получена.')
+            wind.log('Получили информацию по судье ' + match[i].referee_name_whoscored + '.')
 
 
 def write_to_spreadsheets():
@@ -1229,7 +1256,7 @@ def write_to_spreadsheets():
 
     service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet['spreadsheetId'], body={
         'requests': [
-            # Задать размер по содержимому для всех столбцов
+            # Задать размер по содержимому для всех столбцов:
             {
                 'autoResizeDimensions': {
                     'dimensions': {
@@ -1269,35 +1296,30 @@ def write_to_spreadsheets():
                     },
                     "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)"
                 }
-            }
-        ]
-    }).execute()
-
-    '''
-    service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet['spreadsheetId'], body={
-        'requests': [
-            # Задать размеры для всех столбцов
+            },
+            # Изменим вручную ширину столбов 'K' и 'L':
             {
                 'updateDimensionProperties': {
                     'range': {
                         'sheetId': sheet_id,
                         'dimension': 'COLUMNS',
-                        'startIndex': 0,
-                        'endIndex': 16
+                        'startIndex': 10,
+                        'endIndex': 12
                     },
                     'properties': {
-                        'pixelSize': 160
+                        'pixelSize': 82
                     },
                     'fields': 'pixelSize'
                 }
             }
         ]
     }).execute()
-    '''
-    print('Полученная информация записана в Google Sheets.')
+
+    wind.log('Полученная информация записана в Google Sheets.')
 
 
 def main():
+    wind.log('Время начала: ' + datetime.datetime.now().strftime('%H:%M'))
     # Получим виджет списка:
     leagues_list = wind.listViewLeagues
     # Получим объект модели, применённый к списку:
@@ -1367,6 +1389,13 @@ def main():
     driver.quit()
     # Включим кнопку startButton:
     wind.startButton.setEnabled(True)
+
+    wind.log('Время завершения: ' + datetime.datetime.now().strftime('%H:%M'))
+
+    # Если checkBoxShutdown выбран:
+    if wind.checkBoxShutdown.isChecked():
+        # Выключить компьютер через 10 сек:
+        os.system('shutdown /s /t 10')
 
 
 if __name__ == '__main__':
