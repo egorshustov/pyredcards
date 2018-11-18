@@ -36,14 +36,7 @@
     <item>
      <widget class="QPushButton" name="startButton">
       <property name="text">
-       <string>Старт</string>
-      </property>
-     </widget>
-    </item>
-    <item>
-     <widget class="QPushButton" name="reportButton">
-      <property name="text">
-       <string>Отчёт в google spreadsheets</string>
+       <string>Получить информацию по лигам на указанный день и вывести в Google Sheets</string>
       </property>
      </widget>
     </item>

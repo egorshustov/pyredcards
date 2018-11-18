@@ -44,7 +44,7 @@ class Window(QMainWindow):
         global mdb_league_length
         mdb_league_length = len(rows)
 
-        # Получим виджет списка:
+        # Получим виджет списка для лиг:
         leagues_list = self.listViewLeagues
         # Сделаем так, чтобы выведенные в список строки нельзя было редактировать в GUI:
         leagues_list.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -65,23 +65,31 @@ class Window(QMainWindow):
         # Применим модель к списку:
         leagues_list.setModel(model)
 
+        # Получим виджет списка для записи в лог:
+        self.log_list = self.listViewLog
+        # Создадим объект модели для элементов лога:
+        self.model_log = QStandardItemModel()
+        # Применим модель к списку:
+        self.log_list.setModel(self.model_log)
+
         # Создадим обработчик для кнопки:
         self.startButton.clicked.connect(self.on_startbutton_clicked)
-        self.reportButton.clicked.connect(self.on_reportbutton_clicked)
         # Инициализируем объект класса нити:
         self.workerThread = WorkerThread()
-        self.reportThread = ReportThread()
         # Запустим форму окна:
         self.show()
 
     def on_startbutton_clicked(self):
+        # Выключим кнопку startButton:
+        self.startButton.setEnabled(False)
         # При нажатии на кнопку запустим нить workerThread:
         self.workerThread.start()
         # cal = self.calendarWidget
 
-    def on_reportbutton_clicked(self):
-        # При нажатии на кнопку запустим нить workerThread:
-        self.reportThread.start()
+    def log(self, datestring):
+        # Выводим данные в командную строку и в GUI:
+        print(datestring)
+        self.model_log.appendRow(QStandardItem(datestring))
 
 
 class WorkerThread(QThread):
@@ -92,16 +100,6 @@ class WorkerThread(QThread):
     def run(self):
         # Вызываем главную функцию:
         main()
-        self.exec_()
-
-
-class ReportThread(QThread):
-
-    def __init__(self):
-        super(ReportThread, self).__init__()
-
-    def run(self):
-        write_to_spreadsheets()
         self.exec_()
 
 
@@ -209,13 +207,13 @@ def get_matches():
     ##################################################################################
     # МАТЧИ ЗА ДЕНЬ
     ##################################################################################
-    print('Найдём матчи для каждой из лиг на ' + datestring_format(required_date) + ':')
+    wind.log('Найдём матчи для каждой из лиг на ' + datestring_format(required_date) + ':')
     global match
     i_match = 0
     # Для каждой лиги переходим на страницу Календаря Игр сайта whoscored:
     for i in range(0, league_length):
         next_clicked = True
-        print('Лига ' + league[i].league_name + '...')
+        wind.log('Лига ' + league[i].league_name + '...')
         driver.get(league[i].url_whoscored)
         time.sleep(sleep_page_time)  # Пауза для прогрузки страницы
 
@@ -237,7 +235,7 @@ def get_matches():
             tournament_fixture = ui.WebDriverWait(driver, 15).until(
                 lambda driver1: driver.find_element_by_id('tournament-fixture'))
             tournament_fixture_innerhtml = tournament_fixture.get_property('innerHTML')
-            # print(tournament_fixture_innerhtml)
+            # wind.log(tournament_fixture_innerhtml)
             if required_date in tournament_fixture_innerhtml:
                 # Если искомая дата присутствует в таблице, спарсим все матчи на искомую дату для данной лиги.
                 # Спарсим все дни с матчами в таблице:
@@ -283,7 +281,7 @@ def get_matches():
                     # то делаем вывод, что в текущей лиге не нашлось матчей в указанный день:
                     next_clicked = False  # дальше таблицу не листаем
                     league[i].matches_found = False
-                    print('В ' + league[i].league_name + ' на ru.whoscored.com нет матчей в указанный день!')
+                    wind.log('В ' + league[i].league_name + ' на ru.whoscored.com нет матчей в указанный день!')
                 else:
                     # Если последний день в текущем диапазоне дней ещё меньше указанного
                     # (и при этом матчей до этого дня
@@ -298,7 +296,7 @@ def get_matches():
                         # И это значит, что сезон завершился.
                         next_clicked = False  # дальше таблицу не листаем
                         league[i].matches_found = False
-                        print('Сезон лиги ' + league[i].league_name + ' уже завершился на указанный день!')
+                        wind.log('Сезон лиги ' + league[i].league_name + ' уже завершился на указанный день!')
                     else:
                         # Если кнопка активна, перейдём на предыдущий месяц календаря:
                         driver.find_element_by_css_selector('.next').click()
@@ -306,17 +304,17 @@ def get_matches():
     # Определим длину списка matches:
     global matches_length
     matches_length = len(match)
-    print('Поиск матчей для каждой из лиг в указанный день завершен.')
+    wind.log('Поиск матчей для каждой из лиг в указанный день завершен.')
 
 
 def get_personal_meetengs():
     ##################################################################################
     # ЛИЧНЫЕ ВСТРЕЧИ
     ##################################################################################
-    print('Спарсим информацию личных встреч команд для каждого найденного матча:')
+    wind.log('Спарсим информацию личных встреч команд для каждого найденного матча:')
     for i in range(0, matches_length):
         driver.get(match[i].match_url)
-        print('Команды ' + match[i].team_home_name + ' и ' + match[i].team_away_name)
+        wind.log('Команды ' + match[i].team_home_name + ' и ' + match[i].team_away_name)
         time.sleep(sleep_page_time)
         # Проверим наличие таблицы предыдущих встреч двух команд
         # по тексту заголовка previous-meetings-count
@@ -367,13 +365,13 @@ def get_personal_meetengs():
             match[i].team_home_personal_meetings_kk_count_away = -1
             match[i].team_away_personal_meetings_kk_count_home = -1
             match[i].team_away_personal_meetings_kk_count_away = -1
-            print('У команд ' + match[i].team_home_name + ' и '
-                  + match[i].team_away_name + ' не было совместных встреч!')
-    print('Информация личных встреч команд для каждого найденного матча получена.')
+            wind.log('У команд ' + match[i].team_home_name + ' и ' +
+                     match[i].team_away_name + ' не было совместных встреч!')
+    wind.log('Информация личных встреч команд для каждого найденного матча получена.')
 
 
 def get_url_games_calendar_past_season():
-    print('Достанем ссылки на календарь игр прошлых сезонов:')
+    wind.log('Достанем ссылки на календарь игр прошлых сезонов:')
     for i in range(0, league_length):
         if league[i].matches_found is True:
             driver.get(league[i].url_past_season)
@@ -381,7 +379,7 @@ def get_url_games_calendar_past_season():
             league[i].url_games_calendar_past_season = \
                 driver.find_element_by_css_selector('#sub-navigation > ul:nth-child(1) >'
                                                     ' li:nth-child(2) > a:nth-child(1)').get_property('href')
-    print('Ссылки успешно получены.')
+        wind.log('Ссылки успешно получены.')
 
 
 def get_kk_this_or_last_season(this_season):
@@ -389,9 +387,9 @@ def get_kk_this_or_last_season(this_season):
     # КК ЗА ЭТОТ ИЛИ ПРЕДЫДУЩИЙ СЕЗОН, ДАТА ПОСЛЕДНЕЙ КК
     ##################################################################################
     if this_season:
-        print('Получим информацию о КК за текущий сезон:')
+        wind.log('Получим информацию о КК за текущий сезон:')
     else:
-        print('Получим информацию о КК за прошлый сезон:')
+        wind.log('Получим информацию о КК за прошлый сезон:')
 
     for i in range(0, league_length):
         if league[i].matches_found is True:
@@ -406,9 +404,9 @@ def get_kk_this_or_last_season(this_season):
                 # Определим месяц (написан на кнопке):
                 current_month = driver.find_element_by_css_selector('span.text:nth-child(1)').get_property('innerHTML')
                 if this_season:
-                    print('Текущий сезон лиги ' + league[i].league_name + ', месяц ' + current_month + ';')
+                    wind.log('Текущий сезон лиги ' + league[i].league_name + ', месяц ' + current_month + ';')
                 else:
-                    print('Прошлый сезон лиги ' + league[i].league_name + ', месяц ' + current_month + ';')
+                    wind.log('Прошлый сезон лиги ' + league[i].league_name + ', месяц ' + current_month + ';')
 
                 # Получим тело таблицы "Календарь Игр & Результаты":
                 tournament_fixture = ui.WebDriverWait(driver, 15).until(
@@ -484,25 +482,25 @@ def get_kk_this_or_last_season(this_season):
                 if 'is-disabled' in classes_of_button:
                     # Если кнопка неактивна, то продолжать листать календарь назад уже нельзя.
                     if this_season:
-                        print('Парсинг текущего сезона завершён.')
+                        wind.log('Парсинг текущего сезона завершён.')
                     else:
-                        print('Парсинг прошлого сезона завершён.')
+                        wind.log('Парсинг прошлого сезона завершён.')
                     previous_clicked = False
                 else:
                     # Если кнопка активна, перейдём на предыдущий месяц календаря:
                     driver.find_element_by_css_selector('.previous').click()
                     time.sleep(sleep_table_time)  # Пауза для прогрузки таблицы
     if this_season:
-        print('Информация о КК за текущий сезон получена.')
+        wind.log('Информация о КК за текущий сезон получена.')
     else:
-        print('Информация о КК за прошлый сезон получена.')
+        wind.log('Информация о КК за прошлый сезон получена.')
 
 
 def get_referee_championat():
     ##################################################################################
     # ПОЛУЧИМ ИМЯ СУДЬИ НА CHAMPIONAT И СОПОСТАВИМ МАТЧИ НА ОБОИХ САЙТАХ
     ##################################################################################
-    print('Начинаем парсинг championat.com (получим имя судьи для матчей):')
+    wind.log('Начинаем парсинг championat.com (получим имя судьи для матчей):')
     date = datestring_format(required_date)
     date = date.replace('-', '.')
     h = httplib2.Http()  # disable_ssl_certificate_validation=True
@@ -548,14 +546,14 @@ def get_referee_championat():
                     # Если строка 'Главный судья: ' не присутствует на странице, то судья пока известен.
                     # Занесём '???' вместо его имени:
                     match_championat[i_match_champ].referee_name = '???'
-                    print('Для матча ' + match_championat[i_match_champ].team_home_name + '-' +
-                          match_championat[i_match_champ].team_away_name + ' лиги ' +
-                          match_championat[i_match_champ].league_name + ' судья ещё не известен!')
+                    wind.log('Для матча ' + match_championat[i_match_champ].team_home_name + '-' +
+                             match_championat[i_match_champ].team_away_name + ' лиги ' +
+                             match_championat[i_match_champ].league_name + ' судья ещё не известен!')
                 i_match_champ += 1
 
-    print('Парсинг championat.com завершён.')
+    wind.log('Парсинг championat.com завершён.')
 
-    print('Сопоставим матчи на whoscored и championat (проверь соответствие строк!):')
+    wind.log('Сопоставим матчи на whoscored и championat (проверь соответствие строк!):')
     # Cольём названия команд в одну строку и удалим пробелы, чтобы выполнить побуквенное сравнение:
     for i in range(0, matches_length):
         match[i].teamsstring = (match[i].team_home_name + match[i].team_away_name).replace(' ', '')
@@ -609,8 +607,8 @@ def get_referee_championat():
                     # Выведем строки с названиями команд на whoscored и championat для проверки пользователем:
                     whoscored_matchstring = match[j].teamsstring
                     founded_championat_matchstring = match_championat[max_score_index].teamsstring
-                    print(whoscored_matchstring + ' = ' + founded_championat_matchstring
-                          + ' (' + str(max_score) + ' совпадений);')
+                    wind.log(whoscored_matchstring + ' = ' + founded_championat_matchstring
+                             + ' (' + str(max_score) + ' совпадений);')
 
                     match[j].championat_teamsstring = match_championat[max_score_index].teamsstring
                     match[j].referee_name_championat = match_championat[max_score_index].referee_name
@@ -628,14 +626,14 @@ def get_referee_championat():
                     for n in range(0, len(match_championat)):
                         match_championat[n].score = 0
 
-    print('Сопоставление завершено.')
+    wind.log('Сопоставление завершено.')
 
 
 def get_referee_whoscored():
     ##################################################################################
     # ПОЛУЧИМ ИМЕНА СУДЕЙ И ИХ URL НА WHOSCORED
     ##################################################################################
-    print('Получим имена судей и их Url на whoscored:')
+    wind.log('Получим имена судей и их Url на whoscored:')
     referee = []
     # Для каждой лиги:
     for i in range(0, league_length):
@@ -678,7 +676,7 @@ def get_referee_whoscored():
 
             # Найдём самого созвучного судью для каждого матча, где referee_name_championat != "???"
             # и занесём его имя и url в массив match[]:
-            print('Сопоставим имена судей на championat и whoscored (проверь соответствие строк!):')
+            wind.log('Сопоставим имена судей на championat и whoscored (проверь соответствие строк!):')
             # Пройдёмся по всем матчам, найденным на сайте whoscored:
             for j in range(0, matches_length):
                 # которые принадлежат i-той лиге и по которым известны судьи:
@@ -716,24 +714,24 @@ def get_referee_whoscored():
                     match[j].referee_name_whoscored = referee[max_score_index].referee_name_whoscored
                     match[j].referee_url = referee[max_score_index].referee_url
 
-                    print(match[j].referee_name_championat + ' = ' + match[j].referee_name_whoscored
-                          + ' (' + str(max_score) + ' совпадений);')
+                    wind.log(match[j].referee_name_championat + ' = ' + match[j].referee_name_whoscored
+                             + ' (' + str(max_score) + ' совпадений);')
 
                     # Обнулим все referee[].score, перед тем, как перейти к следующему матчу match[j]:
                     for n in range(0, len(referee)):
                         referee[n].score = 0
 
-            print('Получили данные по судьям лиги ' + league[i].league_name + '.')
+            wind.log('Получили данные по судьям лиги ' + league[i].league_name + '.')
             referee.clear()
 
-    print('Имена судей и их Url на whoscored получены.')
+    wind.log('Имена судей и их Url на whoscored получены.')
 
 
 def get_referee_info():
     ##################################################################################
     # ПОЛУЧИМ ИНФОРМАЦИЮ ПО СУДЬЕ С WHOSCORED
     ##################################################################################
-    print('Получим информацию по судье с whoscored:')
+    wind.log('Получим информацию по судье с whoscored:')
     for i in range(0, matches_length):
         if match[i].referee_name_championat != '???':
             driver.get(match[i].referee_url)
@@ -872,18 +870,18 @@ def get_referee_info():
                     time.sleep(sleep_table_time)  # Пауза для прогрузки таблицы
 
             if not match[i].referee_team_home:
-                print('Судья '+match[i].referee_name_whoscored+' не судил команду '+match[i].team_home_name+'!')
+                wind.log('Судья '+match[i].referee_name_whoscored+' не судил команду '+match[i].team_home_name+'!')
             if not match[i].referee_team_away:
-                print('Судья '+match[i].referee_name_whoscored+' не судил команду '+match[i].team_away_name+'!')
+                wind.log('Судья '+match[i].referee_name_whoscored+' не судил команду '+match[i].team_away_name+'!')
 
-    print('Информация по судье успешно получена.')
+        wind.log('Информация по судье успешно получена.')
 
 
 def write_to_spreadsheets():
     ##################################################################################
     # ВЫВОД ДАННЫХ МАССИВА match[] В GOOGLE SHEETS
     ##################################################################################
-    print('Запишем полученную информацию в Google Sheets...')
+    wind.log('Запишем полученную информацию в Google Sheets...')
     # Создаём Service-объект, для работы с Google-таблицами:
     credentials_file = 'RedCardsProject-90325d995892.json'  # имя выгруженного файла с закрытым ключом
     # В Scope укажем к каким API мы хотим получить доступ:
@@ -1364,9 +1362,11 @@ def main():
         # Запишем полученную информацию в Google Sheets:
         write_to_spreadsheets()
     else:
-        print('Ни в одной из лиг не найдено матчей на ' + datestring_format(required_date) + '!')
+        wind.log('Ни в одной из лиг не найдено матчей на ' + datestring_format(required_date) + '!')
     # Завершим сессию браузера и закроем его окно:
     driver.quit()
+    # Включим кнопку startButton:
+    wind.startButton.setEnabled(True)
 
 
 if __name__ == '__main__':
