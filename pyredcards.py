@@ -16,9 +16,9 @@ import time
 import datetime
 import locale
 import sys
-import PyQt5.QtGui as QtGui
-from PyQt5.QtCore import pyqtSlot, QThread, Qt
-from PyQt5.QtWidgets import (QApplication, QDialog, QMainWindow, QWidget, QCalendarWidget)
+from PyQt5.QtGui import *
+from PyQt5.QtCore import *
+from PyQt5.QtWidgets import *
 from PyQt5.uic import loadUi
 
 
@@ -28,6 +28,42 @@ class Window(QMainWindow):
         super(Window, self).__init__(flags=Qt.WindowFlags())
         # Загрузим UI из файла:
         loadUi('redcardsdesigner.ui', self)
+
+        # Получим виджет календаря:
+        cal = self.calendarWidget
+        # Установим в нём выбранную дату по умолчанию как завтрашнюю (отстоящую на 1 день):
+        cal.setSelectedDate(cal.selectedDate().addDays(1))
+
+        # Подключимся к БД Microsoft Access через экземпляр ODBC
+        db = pyodbc.connect('DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=.\\RC_base2.mdb')
+        dbc = db.cursor()
+        # Получим информацию из БД, занесём её в rows
+        rows = dbc.execute('select * from [Leagues]').fetchall()
+        db.close()
+        # Определим длину списка rows:
+        global mdb_league_length
+        mdb_league_length = len(rows)
+
+        # Получим виджет списка:
+        leagues_list = self.listViewLeagues
+        # Сделаем так, чтобы выведенные в список строки нельзя было редактировать в GUI:
+        leagues_list.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        # Создадим объект модели для элементов:
+        model = QStandardItemModel()
+        # Заполним список mdb_league[] экземплярами класса League:
+        global mdb_league
+        for i in range(0, mdb_league_length):
+            mdb_league.append(League(rows[i][1], rows[i][2], rows[i][3]))
+            # Создадим элемент для каждой лиги:
+            item = QStandardItem(mdb_league[i].league_name)
+            # Элемент может принимать два значения - True или False:
+            item.setCheckState(2)
+            # Добавим встроенный CheckBox для каждого элемента:
+            item.setCheckable(True)
+            # Применим элемент к модели:
+            model.appendRow(item)
+        # Применим модель к списку:
+        leagues_list.setModel(model)
 
         # Создадим обработчик для кнопки:
         self.startButton.clicked.connect(self.on_startbutton_clicked)
@@ -510,8 +546,8 @@ def get_referee_championat():
                     league[i].referees_found = True
                 else:
                     # Если строка 'Главный судья: ' не присутствует на странице, то судья пока известен.
-                    # Занесём 'No_Info' вместо его имени:
-                    match_championat[i_match_champ].referee_name = 'No_Info'
+                    # Занесём '???' вместо его имени:
+                    match_championat[i_match_champ].referee_name = '???'
                     print('Для матча ' + match_championat[i_match_champ].team_home_name + '-' +
                           match_championat[i_match_champ].team_away_name + ' лиги ' +
                           match_championat[i_match_champ].league_name + ' судья ещё не известен!')
@@ -578,7 +614,7 @@ def get_referee_championat():
 
                     match[j].championat_teamsstring = match_championat[max_score_index].teamsstring
                     match[j].referee_name_championat = match_championat[max_score_index].referee_name
-                    if match[j].referee_name_championat != 'No_Info':
+                    if match[j].referee_name_championat != '???':
                         translate_url = 'https://translate.yandex.net/api/v1.5/tr.json/translate?key=' \
                                         'trnsl.1.1.20180922T150311Z.5ccad8013c0e69ed.3d4026b2fe47ae4dd0' \
                                         'cc09e8e9017f678fcbe3d9&text=' + match[j].referee_name_championat +\
@@ -640,13 +676,13 @@ def get_referee_whoscored():
                     driver.find_element_by_css_selector('#next').click()
                     time.sleep(sleep_table_time)  # Пауза для прогрузки таблицы
 
-            # Найдём самого созвучного судью для каждого матча, где referee_name_championat != "No_Info"
+            # Найдём самого созвучного судью для каждого матча, где referee_name_championat != "???"
             # и занесём его имя и url в массив match[]:
             print('Сопоставим имена судей на championat и whoscored (проверь соответствие строк!):')
             # Пройдёмся по всем матчам, найденным на сайте whoscored:
             for j in range(0, matches_length):
                 # которые принадлежат i-той лиге и по которым известны судьи:
-                if match[j].league_name == league[i].league_name and match[j].referee_name_championat != 'No_Info':
+                if match[j].league_name == league[i].league_name and match[j].referee_name_championat != '???':
                     # Возьмём строку с переведённым на английский именем судьи
                     # (match[j].referee_name_championat_translated_to_en) и в цикле пройдемся по ней,
                     # перебирая каждые её два символа, идущие подряд, с шагом, равным 1
@@ -699,7 +735,7 @@ def get_referee_info():
     ##################################################################################
     print('Получим информацию по судье с whoscored:')
     for i in range(0, matches_length):
-        if match[i].referee_name_championat != 'No_Info':
+        if match[i].referee_name_championat != '???':
             driver.get(match[i].referee_url)
             time.sleep(1.5*sleep_page_time)
             # Получим таблицу 'Турниры':
@@ -824,7 +860,6 @@ def get_referee_info():
                             match[i].referee_to_team_away_average = td_tags[8].text
                             if match[i].referee_to_team_away_average == '0.00':
                                 match[i].referee_to_team_away_average = '0'
-
                         # Если уже нашли обе команды в таблице, то нет смысла листать её дальше:
                         if match[i].referee_team_home and match[i].referee_team_away:
                             break
@@ -1097,12 +1132,12 @@ def write_to_spreadsheets():
     previous_league_name = ''
     for i in range(0, matches_length):
         # Подготовим информацию по судье для её последующего вывода:
-        referee_this_season = ''
-        referee_all_seasons = ''
-        referee_team_home = ''
-        referee_team_away = ''
-        referee_last_twenty = ''
-        if match[i].referee_name_championat != 'No_Info':
+        referee_this_season = '???'
+        referee_all_seasons = '???'
+        referee_team_home = '???'
+        referee_team_away = '???'
+        referee_last_twenty = '???'
+        if match[i].referee_name_championat != '???':
             referee_this_season = \
                 match[i].referee_this_season_average + ' за ' + str(match[i].referee_this_season_matches_count)
             referee_all_seasons = \
@@ -1265,20 +1300,23 @@ def write_to_spreadsheets():
 
 
 def main():
-    # Подключимся к БД Microsoft Access через экземпляр ODBC
-    db = pyodbc.connect('DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=.\\RC_base2.mdb')
-    dbc = db.cursor()
-    # Получим информацию из БД, занесём её в rows
-    rows = dbc.execute('select * from [Leagues]').fetchall()
-    db.close()
-    # Определим длину списка rows:
-    global league_length
-    league_length = len(rows)
-    # Инициализируем список league[] и заполним его экземплярами класса League:
+    # Получим виджет списка:
+    leagues_list = wind.listViewLeagues
+    # Получим объект модели, применённый к списку:
+    model = leagues_list.model()
+    # Объявим список глобальным league[] и очистим его:
     global league
     league.clear()
-    for i in range(0, league_length):
-        league.append(League(rows[i][1], rows[i][2], rows[i][3]))
+    # Пройдёмся по каждому элементу списка mdb_league_length[], в который были занесены все лиги из БД:
+    for i in range(0, mdb_league_length):
+        # Если элемент лиги был отмечен пользователем,
+        if model.item(i).checkState() == 2:
+            # Добавим его в список лиг, с которыми программа будет работаь далее:
+            league.append(mdb_league[i])
+
+    # Определим длину списка league[]:
+    global league_length
+    league_length = len(league)
 
     includes_path = 'C:/Users/BRAXXMAN/PycharmProjects/includes/'
     global driver
@@ -1332,14 +1370,21 @@ def main():
 
 
 if __name__ == '__main__':
+    # Список, куда будут занесены все лиги из БД:
+    mdb_league = []
+    mdb_league_length = 0
+
+    # Список, который будет сформирован на основе тех лиг, которые выбрал пользователь из списка mdb_league[]:
     league = []
     league_length = 0
 
+    # Список, в который будут занесены все матчи и информация по ним. Основной список в программе:
     match = []
     matches_length = 0
 
-    sleep_page_time = 5
-    sleep_table_time = 1
+    # Временные задержки для того, чтобы сервер не разорвал соединение по причине слишком частых обращений:
+    sleep_page_time = 5  # Задержка после загрузки страницы
+    sleep_table_time = 1  # Задержка после пролистывания таблицы
     # Получаем текущую локаль:
     default_loc = locale.getlocale()
     # Изменяем локаль для корректной конвертации строки с русской датой в datetime:
