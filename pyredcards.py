@@ -1049,6 +1049,48 @@ def write_to_spreadsheets():
                         'innerVertical': border
                     }
                 },
+                # Применим форматирование (цвет фона) к ячейкам заголовка (установим светло-серый цвет):
+                {
+                    "repeatCell": {
+                        "range": {
+                            "sheetId": sheet_id,
+                            "startRowIndex": 0,
+                            "endRowIndex": 2
+                        },
+                        "cell": {
+                            "userEnteredFormat": {
+                                "backgroundColor": {
+                                    "red": 0.8,
+                                    "green": 0.8,
+                                    "blue": 0.8
+                                }
+                            }
+                        },
+                        "fields": "userEnteredFormat(backgroundColor)"
+                    }
+                },
+                # Применим форматирование (цвет фона) к ячейкам заголовка (вернём белый цвет столбцу N):
+                {
+                    "repeatCell": {
+                        "range": {
+                            "sheetId": sheet_id,
+                            "startRowIndex": 0,
+                            "endRowIndex": 2,
+                            'startColumnIndex': 13,
+                            'endColumnIndex': 14
+                        },
+                        "cell": {
+                            "userEnteredFormat": {
+                                "backgroundColor": {
+                                    "red": 1.0,
+                                    "green": 1.0,
+                                    "blue": 1.0
+                                }
+                            }
+                        },
+                        "fields": "userEnteredFormat(backgroundColor)"
+                    }
+                },
                 # Удалим границы для ячеек столбца N:
                 {
                     'updateBorders': {
@@ -1174,26 +1216,25 @@ def write_to_spreadsheets():
         # Подготовим информацию по судье для её последующего вывода:
         referee_this_season = '???'
         referee_all_seasons = '???'
-        referee_team_home = '???'
-        referee_team_away = '???'
+        referee_to_teams = '???'
         referee_last_twenty = '???'
         if match[i].referee_name_championat != '???':
             referee_this_season = \
-                match[i].referee_this_season_average + ' за ' + str(match[i].referee_this_season_matches_count)
+                match[i].referee_this_season_average + ' (' + str(match[i].referee_this_season_matches_count) + ')'
             referee_all_seasons = \
-                match[i].referee_all_seasons_average + ' за ' + str(match[i].referee_all_seasons_matches_count)
+                match[i].referee_all_seasons_average + ' (' + str(match[i].referee_all_seasons_matches_count) + ')'
 
-            if match[i].referee_team_home:
-                referee_team_home = match[i].referee_to_team_home_average + ' за '\
-                                    + str(match[i].referee_team_home_matches_count)
-            else:
-                referee_team_home = 'Не судил'
+            if not match[i].referee_team_home:
+                match[i].referee_to_team_home_average = '-'
+                match[i].referee_team_home_matches_count = 0
 
-            if match[i].referee_team_away:
-                referee_team_away = match[i].referee_to_team_away_average + ' за '\
-                                    + str(match[i].referee_team_away_matches_count)
-            else:
-                referee_team_away = 'Не судил'
+            if not match[i].referee_team_away:
+                match[i].referee_to_team_away_average = '-'
+                match[i].referee_team_away_matches_count = 0
+
+            referee_to_teams = match[i].referee_to_team_home_average + '/' + match[i].referee_to_team_away_average
+            + ' (' + str(match[i].referee_team_home_matches_count) + '/' + str(
+                match[i].referee_team_away_matches_count) + ')'
 
             referee_last_twenty = str(match[i].referee_last_twenty_home_count) + 'д' + str(
                 match[i].referee_last_twenty_away_count) + 'г ' + match[i].referee_last_twenty_last_kk_date
@@ -1252,8 +1293,7 @@ def write_to_spreadsheets():
                             [match[i].league_name, match[i].team_home_name, match[i].team_away_name,
                              match[i].match_datetime,
                              referee_this_season, referee_all_seasons,
-                             referee_team_home + '/' + referee_team_away,
-                             referee_last_twenty,
+                             referee_to_teams, referee_last_twenty,
                              str(match[i].team_home_kk_this_season_count) + '/' +
                              str(match[i].team_away_kk_this_season_count),
                              str_team_home_kk_last_season_count + '/' +
@@ -1282,7 +1322,7 @@ def write_to_spreadsheets():
                     }
                 }
             },
-            # Применим форматирование (цвет фона и текста, выравнивание) к ячейкам:
+            # Применим форматирование (выравнивание) к ячейкам:
             {
                 "repeatCell": {
                     "range": {
@@ -1292,24 +1332,10 @@ def write_to_spreadsheets():
                     },
                     "cell": {
                         "userEnteredFormat": {
-                            "backgroundColor": {
-                                "red": 1.0,
-                                "green": 1.0,
-                                "blue": 1.0
-                            },
-                            "horizontalAlignment": "CENTER",
-                            "textFormat": {
-                                "foregroundColor": {
-                                    "red": 0.0,
-                                    "green": 0.0,
-                                    "blue": 0.0
-                                },
-                                # "fontSize": 12,
-                                # "bold": True
-                            }
+                            "horizontalAlignment": "CENTER"
                         }
                     },
-                    "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)"
+                    "fields": "userEnteredFormat(horizontalAlignment)"
                 }
             },
             # Изменим вручную ширину столбов 'K' и 'L':
