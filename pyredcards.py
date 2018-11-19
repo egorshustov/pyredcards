@@ -30,9 +30,9 @@ class Window(QMainWindow):
         loadUi('redcardsdesigner.ui', self)
 
         # Получим виджет календаря:
-        cal = self.calendarWidget
+        self.cal = self.calendarWidget
         # Установим в нём выбранную дату по умолчанию как завтрашнюю (отстоящую на 1 день):
-        cal.setSelectedDate(cal.selectedDate().addDays(1))
+        self.cal.setSelectedDate(self.cal.selectedDate().addDays(1))
 
         # Подключимся к БД Microsoft Access через экземпляр ODBC
         db = pyodbc.connect('DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=.\\RC_base2.mdb')
@@ -48,8 +48,9 @@ class Window(QMainWindow):
         leagues_list = self.listViewLeagues
         # Сделаем так, чтобы выведенные в список строки нельзя было редактировать в GUI:
         leagues_list.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        # Создадим объект модели для элементов:
-        model = QStandardItemModel()
+        # Создадим объект модели для элементов
+        # (если указываем 'self.', то объект из локального становится объектом класса):
+        self.model = QStandardItemModel()
         # Заполним список mdb_league[] экземплярами класса League:
         global mdb_league
         for i in range(0, mdb_league_length):
@@ -61,9 +62,9 @@ class Window(QMainWindow):
             # Добавим встроенный CheckBox для каждого элемента:
             item.setCheckable(True)
             # Применим элемент к модели:
-            model.appendRow(item)
+            self.model.appendRow(item)
         # Применим модель к списку:
-        leagues_list.setModel(model)
+        leagues_list.setModel(self.model)
 
         # Получим виджет списка для записи в лог:
         self.log_list = self.listViewLog
@@ -74,6 +75,8 @@ class Window(QMainWindow):
 
         # Создадим обработчик для кнопки:
         self.startButton.clicked.connect(self.on_startbutton_clicked)
+        # Создадим обработчик для пункта меню action_checkbox:
+        self.action_checkbox.triggered.connect(self.on_invert_checkbox_clicked)
         # Инициализируем объект класса нити:
         self.workerThread = WorkerThread()
         # Запустим форму окна:
@@ -90,6 +93,18 @@ class Window(QMainWindow):
         # Выводим данные в командную строку и в GUI:
         print(datestring)
         self.model_log.appendRow(QStandardItem(datestring))
+
+    def on_invert_checkbox_clicked(self):
+        # Пройдёмся по всем элементам лиг в leagues_list:
+        for i in range(0, mdb_league_length):
+            # Если чекбокс элемента лиги включен:
+            if self.model.item(i).checkState() == 2:
+                # Выключим его:
+                self.model.item(i).setCheckState(0)
+            # Если чекбокс элемента лиги выключен:
+            else:
+                # Выключим его:
+                self.model.item(i).setCheckState(2)
 
 
 class WorkerThread(QThread):
