@@ -1232,12 +1232,12 @@ def write_to_spreadsheets():
                 match[i].referee_to_team_away_average = '-'
                 match[i].referee_team_away_matches_count = 0
 
-            referee_to_teams = match[i].referee_to_team_home_average + '/' + match[i].referee_to_team_away_average
-            + ' (' + str(match[i].referee_team_home_matches_count) + '/' + str(
-                match[i].referee_team_away_matches_count) + ')'
+            referee_to_teams = match[i].referee_to_team_home_average + '/' + match[i].referee_to_team_away_average + \
+                ' (' + str(match[i].referee_team_home_matches_count) + '/' + \
+                str(match[i].referee_team_away_matches_count) + ')'
 
-            referee_last_twenty = str(match[i].referee_last_twenty_home_count) + 'д' + str(
-                match[i].referee_last_twenty_away_count) + 'г ' + match[i].referee_last_twenty_last_kk_date
+            referee_last_twenty = str(match[i].referee_last_twenty_home_count) + 'д' + \
+                str(match[i].referee_last_twenty_away_count) + 'г ' + match[i].referee_last_twenty_last_kk_date
 
         # Соберём строку str_personal_meetings для её последующего вывода:
         if ((match[i].team_home_personal_meetings_kk_count_home != -1) and
