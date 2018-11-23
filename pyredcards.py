@@ -679,8 +679,16 @@ def get_referee_whoscored():
             # Пока не найдём последний тег:
             while not end_tag_found:
                 # Получим тело таблицы "Статистика Рефери":
-                referee_tournaments = ui.WebDriverWait(driver, 15).until(
-                    lambda driver1: driver.find_element_by_id('referee-tournaments-table-body'))
+                try:
+                    referee_tournaments = ui.WebDriverWait(driver, 15).until(
+                        lambda driver1: driver.find_element_by_id('referee-tournaments-table-body'))
+                except Exception:
+                    driver.get(league[i].url_referee_statistics)
+                    time.sleep(sleep_page_time)
+                    referee_tournaments = ui.WebDriverWait(driver, 15).until(
+                        lambda driver1: driver.find_element_by_id('referee-tournaments-table-body'))
+                    pass
+
                 referee_tournaments_innerhtml = referee_tournaments.get_property('innerHTML')
                 soup = BeautifulSoup(referee_tournaments_innerhtml, 'html.parser')
                 # Получим теги всех судей на текущей странице таблицы:
@@ -779,9 +787,18 @@ def get_referee_info():
             wind.log('Получим информацию по судье ' + match[i].referee_name_whoscored + '...')
             driver.get(match[i].referee_url)
             time.sleep(1.5*sleep_page_time)
-            # Получим таблицу 'Турниры':
-            referee_tournaments = ui.WebDriverWait(driver, 15).until(
-                lambda driver1: driver.find_element_by_id('referee-tournaments-table-body'))
+
+            try:
+                # Получим таблицу 'Турниры':
+                referee_tournaments = ui.WebDriverWait(driver, 15).until(
+                    lambda driver1: driver.find_element_by_id('referee-tournaments-table-body'))
+            except Exception:
+                driver.get(match[i].referee_url)
+                time.sleep(1.5 * sleep_page_time)
+                referee_tournaments = ui.WebDriverWait(driver, 15).until(
+                    lambda driver1: driver.find_element_by_id('referee-tournaments-table-body'))
+                pass
+
             referee_tournaments_innerhtml = referee_tournaments.get_property('innerHTML')
             # Достанем из неё среднее количество КК за текущий сезон:
             soup = BeautifulSoup(referee_tournaments_innerhtml, 'html.parser')
