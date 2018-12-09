@@ -262,11 +262,16 @@ def get_matches():
                         # данной лиги и выйдем из цикла:
                         soup = BeautifulSoup(day, 'html.parser')
                         match_datetime = soup.findAll('td', {'class': 'time'})
+                        match_statuses = soup.findAll('td', {'class': 'status'})
                         teams_home = soup.findAll('td', {'class': 'team home'})
                         teams_away = soup.findAll('td', {'class': 'team away'})
-                        match_urls = soup.findAll('a', {'class': 'result-4 rc'})
+                        match_urls = soup.findAll('td', {'class': 'result'})
                         # Для каждого матча искомого дня текущей лиги получим его данные и занесём в массив match[]:
                         for j in range(0, len(teams_home)):
+                            match_status = match_statuses[j].find('span', {'class': 'rc'}).text
+                            if match_status == 'Отл':
+                                # Если статус матча - 'отложен', то не берём его и переходим к следующему:
+                                continue
                             match.append(Match())
                             match[i_match].league_name = league[i].league_name
                             match[i_match].match_datetime = match_datetime[j].text
@@ -276,7 +281,8 @@ def get_matches():
                             match[i_match].team_away_url = 'https://ru.whoscored.com' + \
                                                            teams_away[j].find('a', {'class': 'team-link '})['href']
                             match[i_match].team_away_name = teams_away[j].find('a', {'class': 'team-link '}).text
-                            match[i_match].match_url = 'https://ru.whoscored.com' + match_urls[j]['href']
+                            match[i_match].match_url = 'https://ru.whoscored.com' + \
+                                                       match_urls[j].find('a', {'class': 'rc'})['href']
                             next_clicked = False  # дальше таблицу не листаем
                             i_match = i_match + 1
                         break
