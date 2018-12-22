@@ -534,43 +534,51 @@ def get_referee_championat():
         if league[i].matches_found:
             # Получим страницу календаря игр для каждой лиги:
             tournament_fixture_championat = h.request(league[i].url_championat, 'GET')
-            # Разобъём с помощью указанной даты страницу календаря игр на строки:
-            all_matches = tournament_fixture_championat[1].decode('utf-8').split(date)
-            # Пройдёмся с первого по последний элемент в списке полученных строк
-            # (каждая строка содержит информацию об отдельном матче):
-            for j in range(1, len(all_matches)):
-                match_championat.append(MatchChampionat())
-                # Занесём в массив название текущей лиги:
-                match_championat[i_match_champ].league_name = league[i].league_name
-                soup = BeautifulSoup(all_matches[j], 'html.parser')
-                # Получим все теги 'a' в строке:
-                all_a_tags = soup.findAll('a')
-                # Первый тег содержит имя домашней команды:
-                match_championat[i_match_champ].team_home_name = all_a_tags[0].text
-                # Второй тег содержит имя гостевой команды:
-                match_championat[i_match_champ].team_away_name = all_a_tags[1].text
-                # Третий тег содержит ссылку на будущий матч двух команд:
-                match_championat[i_match_champ].match_url = 'https://www.championat.com' + all_a_tags[2]['href']
+            # Декодируем страницу и получим все матчи на странице построчно:
+            soup = BeautifulSoup(tournament_fixture_championat[1].decode('utf-8'), 'html.parser')
+            all_matches = soup.findAll('tr', {'class': 'js-tournament-filter-row'})
+            # Пройдёмся с первого по последний элемент в списке полученных строк:
+            for j in range(0, len(all_matches)):
+                # Если искомая дата присутствует в тексте строки с матчем, то занесём этот матч в массив:
+                if date in all_matches[j].text:
+                    match_championat.append(MatchChampionat())
+                    # Занесём в массив название текущей лиги:
+                    match_championat[i_match_champ].league_name = league[i].league_name
+                    # Получим все теги 'a' в строке:
+                    all_a_tags = all_matches[j].findAll('a')
+                    # Первый тег содержит имя домашней команды:
+                    match_championat[i_match_champ].team_home_name = all_a_tags[1].text
+                    # Второй тег содержит имя гостевой команды:
+                    match_championat[i_match_champ].team_away_name = all_a_tags[2].text
+                    # Нулевой тег содержит ссылку на будущий матч двух команд:
+                    match_championat[i_match_champ].match_url = 'https://www.championat.com' + all_a_tags[0]['href']
 
-                # Выполним новый GET-запрос чтобы получить имя судьи (для этого перейдём по match_url):
-                match_page = h.request(match_championat[i_match_champ].match_url, 'GET')
-                # Страницв закодирована с utf-8, раскодируем её:
-                match_page_st = match_page[1].decode('utf-8')
-                if 'Главный судья:' in match_page_st:
-                    # Если строка 'Главный судья: ' присутствует на странице, то судья известен. Спарсим его имя:
-                    tree = html.fromstring(match_page_st)
-                    # Получим элемент с именем судьи по его XPath с помощью библиотеки lxml:
-                    referee_element = tree.xpath('/html/body/div[5]/div[6]/div[1]/div/div/div[4]/div[2]/div[1]/a')[0]
-                    match_championat[i_match_champ].referee_name = referee_element.text
-                    league[i].referees_found = True
-                else:
-                    # Если строка 'Главный судья: ' не присутствует на странице, то судья пока известен.
-                    # Занесём '???' вместо его имени:
-                    match_championat[i_match_champ].referee_name = '???'
-                    wind.log('Для матча ' + match_championat[i_match_champ].team_home_name + '-' +
-                             match_championat[i_match_champ].team_away_name + ' лиги ' +
-                             match_championat[i_match_champ].league_name + ' судья ещё не известен!')
-                i_match_champ += 1
+                    # Выполним новый GET-запрос чтобы получить имя судьи (для этого перейдём по match_url):
+                    match_page = h.request(match_championat[i_match_champ].match_url, 'GET')
+                    # Страницв закодирована с utf-8, раскодируем её:
+                    match_page_st = match_page[1].decode('utf-8')
+                    if 'Главный судья:' in match_page_st:
+                        # Если строка 'Главный судья: ' присутствует на странице, то судья известен. Спарсим его имя:
+                        soup = BeautifulSoup(match_page_st, 'html.parser')
+                        # Получим список строк с информацией о матче:
+                        match_info_rows = soup.findAll('div', {'class': 'match-info__extra-row'})
+                        # Из полученных строк найдём ту, которая содержит информацию о судьях в матче:
+                        for row in match_info_rows:
+                            if 'Главный судья:' in row.text:
+                                # Получим все теги 'a' для строки, содержащей информацию о судьях в матче:
+                                a_tags = row.findAll('a')
+                                # Нулевой тег содержит имя главного судьи:
+                                match_championat[i_match_champ].referee_name = a_tags[0].text
+                                league[i].referees_found = True
+                                break
+                    else:
+                        # Если строка 'Главный судья: ' не присутствует на странице, то судья пока известен.
+                        # Занесём '???' вместо его имени:
+                        match_championat[i_match_champ].referee_name = '???'
+                        wind.log('Для матча ' + match_championat[i_match_champ].team_home_name + '-' +
+                                 match_championat[i_match_champ].team_away_name + ' лиги ' +
+                                 match_championat[i_match_champ].league_name + ' судья ещё не известен!')
+                    i_match_champ += 1
 
     wind.log('Парсинг championat.com завершён.')
 
